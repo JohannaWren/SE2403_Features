@@ -1,0 +1,1565 @@
+---
+title: '**PROJECT REPORT**'
+header-includes:
+- \usepackage{tabto}
+- \usepackage{pdflscape}
+- \usepackage{titling}
+- \usepackage{graphicx}
+- \usepackage{fancyhdr}
+- \newcommand{\blandscape}{\begin{landscape}}
+- \newcommand{\elandscape}{\end{landscape}}
+- \usepackage[T1]{fontenc}
+- \usepackage[utf8]{inputenc}
+- \usepackage{titling}
+- "\\setlength{\\droptitle}{-1in}"
+- \pretitle{\begin{center}
+- \includegraphics[width=4.5in]{PIFSCletterhead.png}\LARGE\\}
+mainfont: Times New Roman
+output:
+  pdf_document:
+    toc: false
+    df_print: paged
+  word_document:
+    toc: false
+fontsize: 12pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '~/Documents/Cruises/SE2403_Features/')
+```
+
+```{r message=FALSE, include=FALSE}
+# Clear workspace
+rm(list=ls())
+
+# Set working directory
+mainDir <- '~/Documents/Cruises/SE2403_Features/'
+
+library(dplyr)
+library(readxl)
+library(metR)
+library(stringr)
+library(data.table)
+library(lubridate)
+library(rerddap)
+library(raster)
+library(oce)
+library(kableExtra)
+library(gridExtra)
+
+```
+
+<!--Load all the 'background' data needed (e.g. SCS, CTD, etc.)
+
+## CTD data
+-->
+```{r include=FALSE, message=FALSE}
+# set up the CTD file
+# preallocate the container to store the individual 
+ctdList = list()
+## Loop the CNV file and create a list of casted CTD
+files = dir(path = "CTD/downcast/regular", pattern = ".cnv", full.names = TRUE )
+cast <- as.numeric(str_extract(files, "[[:digit:]]+"))
+
+for (i in 1:length(files)){
+  ctdList[[i]]  = read.ctd(files[i])
+}
+
+# A section allows you to plot multiple stations along a lon/lat line
+section = ctdList %>% 
+  as.section()
+
+# Make a summary table with CTD locations, datetime, station, cast, and what eddy it is in. This can be used as a reference and to assign stations and locations to other data. The summary/pts data comes from the CTD section. 
+ctdPts <- data.frame(Cast=cast,
+                         Lon=section@metadata$longitude, 
+                         Lat=section@metadata$latitude,
+                         DateUTC=section@metadata$time,
+                         DateHST=as.POSIXct(format(section@metadata$time, tz='HST')))
+
+# Assign station numbers to all stations because enough are missing or wrong in SCS
+ctdPts[which(ctdPts$DateHST >= '2024-03-19 07:00:00' & ctdPts$DateHST < "2024-03-20 18:00:00"),'Station'] <- 1
+ctdPts[which(ctdPts$DateHST >= '2024-03-21 19:00:00' & ctdPts$DateHST < "2024-03-23 18:00:00"),'Station'] <- 2
+ctdPts[which(ctdPts$DateHST >= '2024-03-24 00:00:00' & ctdPts$DateHST < "2024-03-25 12:00:00"),'Station'] <- 3
+ctdPts[which(ctdPts$DateHST >= '2024-03-25 18:00:00' & ctdPts$DateHST < "2024-03-26 19:00:00"),'Station'] <- 4
+ctdPts[which(ctdPts$DateHST >= '2024-03-27 04:00:00' & ctdPts$DateHST < "2024-03-28 12:00:00"),'Station'] <- 5
+ctdPts[which(ctdPts$DateHST >= '2024-03-28 17:00:00' & ctdPts$DateHST < "2024-03-29 19:00:00"),'Station'] <- 6
+ctdPts[which(ctdPts$DateHST >= '2024-03-30 07:00:00' & ctdPts$DateHST < "2024-03-31 07:00:00"),'Station'] <- 7
+ctdPts[which(ctdPts$DateHST >= '2024-03-31 18:00:00' & ctdPts$DateHST < "2024-04-01 19:00:00"),'Station'] <- 8
+ctdPts[which(ctdPts$DateHST >= '2024-04-02 06:00:00' & ctdPts$DateHST < "2024-04-03 06:00:00"),'Station'] <- 9
+ctdPts[which(ctdPts$DateHST >= '2024-04-03 18:00:00' & ctdPts$DateHST < "2024-04-04 18:00:00"),'Station'] <- 10
+ctdPts[which(ctdPts$DateHST >= '2024-04-05 06:00:00' & ctdPts$DateHST < "2024-04-06 06:00:00"),'Station'] <- 11
+ctdPts[which(ctdPts$DateHST >= '2024-04-06 18:00:00' & ctdPts$DateHST < "2024-04-07 18:00:00"),'Station'] <- 12
+ctdPts[which(ctdPts$DateHST >= '2024-04-08 06:00:00' & ctdPts$DateHST < "2024-04-09 06:00:00"),'Station'] <- 13
+ctdPts[which(ctdPts$DateHST >= '2024-04-09 18:00:00' & ctdPts$DateHST < "2024-04-10 18:00:00"),'Station'] <- 14
+ctdPts[which(ctdPts$DateHST >= '2024-04-10 18:00:00' & ctdPts$DateHST < "2024-04-11 18:00:00"),'Station'] <- 15
+ctdPts[which(ctdPts$DateHST >= '2024-04-12 06:00:00' & ctdPts$DateHST < "2024-04-13 06:00:00"),'Station'] <- 16
+ctdPts[which(ctdPts$DateHST >= '2024-04-13 06:00:00'),'Station'] <- 17
+
+# Assign eddy location to the different locations
+ctdPts[which(ctdPts$Station < 6), 'Location'] <- 'Cyclonic 1'
+ctdPts[which(ctdPts$Station  >= 6 & ctdPts$Station < 13), 'Location'] <- 'Anti-Cyclonic'
+ctdPts[which(ctdPts$Station >= 13), 'Location'] <- 'Cyclonic 2'
+
+# Classify as Day/Night
+ctdPts$Day.Night <- 'N'
+ctdPts[as.ITime(ctdPts$DateHST) <  as.ITime("08:00:00"),]$Day.Night <- 'D'
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+CTDlog <- read.csv('CTDlog.csv') %>% 
+   mutate(DateTimeHST=as.POSIXct(DateTimeHST, format='%Y-%m-%d %H:%M:%S'))
+```
+
+<!--
+This bit takes the full CTD data and makes a dataframe. I'm sure I can do this from the .csv data but I can't figure out how. -->
+```{r include=FALSE, message=F, warning=FALSE}
+# preallocate the container to store the individual 
+ctd = list()
+## Loop the CNV file and create a list of casted CTD
+files = dir(path = "CTD/downcast/regular", pattern = ".asc", full.names = TRUE )
+
+for (i in 1:length(files)) { 
+  ctd[[i]]  = read.csv(files[i]) %>%
+    mutate(DateTimeUTC = as.POSIXct(paste(mm.dd.yyyy, hh.mm.ss), format='%m/%d/%Y %H:%M:%S', tz='UTC'), DateTimeHST = as.POSIXct(format(DateTimeUTC, tz='HST')), hh.mm=format(round_date(DateTimeHST, unit='1 minute'), '%H%M'), Cast=cast[i])
+}
+ctd <- rbindlist(ctd)
+names(ctd)[4:23] <- names(section@data$station[[4]]@data)[3:22]
+ctd <- left_join(ctd, ctdPts[,c('Cast', 'Station', 'Location', 'Day.Night')])
+```
+<!--
+This bit calculates MLD, chlMax etc. 
+-->
+```{r eval=FALSE, include=FALSE}
+library(castr)
+# Now compute summary statistics on each despiked profile
+stats <- ctd %>% group_by(Cast) %>%
+    summarise(
+        thermocline = clined(temperature, depth, n.smooth=2, k=2),
+        pycnocline = clined(density, depth),
+        strat_index = stratif(density, depth, min.depths=15:20, max.depth=60:65),
+        DCM = maxd(fluorescence, depth, n.smooth=2, k=3),
+        MLD = mld(density, depth, ref.depths=15:16),
+        # it is even possible to use variables computed above to make the
+        # following computations adapted to each cast:
+        # average temperature in the mixed layer only
+        temp_avg = integrate(temperature, depth, from=0, to=MLD, fun=mean),
+        # stock of Chl a within 10 m of the DCM
+        chla_dcm_stock = integrate(fluorescence, depth, from=DCM-10, to=DCM+10)
+    )
+```
+<!--
+#### Temperature - depth profiles
+Calculate MLD and other variables. These calculations are from Fiedler 2010 and I am defining the MLD independently of the thermocline as the depth at which T=SST-0.8°C (Kara et al. 2000,2003) and the thermocline using the **Variable representative isotherm method** as it best estimates the thermocline depth in subtropical waters where thermocline strength tends to be a bit weaker. 
+-->
+```{r message=FALSE, warning=FALSE, include=FALSE}
+datMLD <- ctd %>% 
+  group_by(Cast) %>% 
+  filter(depth <=20) %>% 
+  summarise(SST=mean(temperature)) %>%
+  mutate(T_MLD=SST-0.8)
+
+# Temp at 400 meters and thermocline temp
+datMLD <- ctd %>% 
+  group_by(Cast) %>% 
+  filter(near(depth, 400, 0.1)) %>% 
+  summarise(T_400=mean(temperature)) %>%
+  full_join(datMLD) %>%
+  dplyr::select(Cast, SST, T_MLD, T_400) %>%
+  mutate(TT=T_MLD-(0.25*(T_MLD-T_400)), T_TB=T_MLD-(0.5*(T_MLD-T_400)))
+  
+ML <- data.frame(Cast=NA, D_MLD=NA, D_TT=NA, D_TB=NA, TS=NA, intercept=NA)
+for (i in cast) {
+  MLtemp <- datMLD$T_MLD[which(datMLD$Cast == i)]
+  myDat <- ctd %>%
+    filter(Cast == i, near(temperature, MLtemp, 0.1)) %>%
+    summarise(D_MLD=mean(depth))
+  
+  Ttemp <- datMLD$TT[which(datMLD$Cast == i)]
+  myTemp <- ctd %>%
+    filter(Cast == i, near(temperature, Ttemp, 0.1)) %>%
+    summarise(D_TT=mean(depth))
+  
+  TBtemp <- datMLD$T_TB[which(datMLD$Cast == i)]
+  myTemp2 <- ctd %>%
+    filter(Cast == i, near(temperature, TBtemp, 0.15)) %>%
+    summarise(D_TB=mean(depth))
+  
+  TSdat <- ctd %>%
+    filter(Cast == i, depth > as.numeric(myDat) & depth <= as.numeric(myTemp2))
+  
+  LM <- lm(depth ~ temperature, data=TSdat)
+  TS <- LM$coeff[[2]]
+  int <- LM$coeff[[1]]
+  
+  ML <- rbind(ML, data.frame(Cast=i, myDat, myTemp, myTemp2, TS=TS, intercept=int))
+}
+
+datMLD <- inner_join(datMLD, ML) %>%
+  mutate(TW=D_TB-D_MLD) %>% 
+  right_join(ctdPts[,c('Cast', 'Station', 'Day.Night', 'Location')])
+```
+
+<!-- 
+The SCS data is not complete. There are a lot of button presses missing especially early on, and the stations aren't right. So I'll have to manually enter all the stations, and combine this with the gear data sheets for the full picture. 
+-->
+```{r message=FALSE, include=FALSE}
+# Load SCS data
+scs <- read_xlsx('SCS/Snap_Final.xlsx') %>% 
+  mutate(Long_deg = as.numeric(substr(`Furuno-GP170_Longitude`, 1, 3)), Lat_deg = as.numeric(substr(`Furuno-GP170_Latitude`, 1, 2)), Long_min=as.numeric(str_sub(`Furuno-GP170_Longitude`, -nchar(`Furuno-GP170_Longitude`)+3, -2))/60, Lat_min=as.numeric(str_sub(`Furuno-GP170_Latitude`, -nchar(`Furuno-GP170_Latitude`)+2, -2))/60, Longitude=-Long_deg-Long_min, Latitude=Lat_deg+Lat_min, DateTimeUTC=as.POSIXct(paste(as.IDate(Date),format(Time, format = "%H:%M:%S")), tz = 'UTC'), DateTimeHST = as.POSIXct(format(DateTimeUTC, tz='HST'), Date2=as.IDate(DateTimeHST))) 
+
+# Convert orig tibble to data frame
+track <- as.data.frame(scs)
+names(track) <- make.names(names(track))
+track$Station.Number <- NA
+
+# Assign station numbers to all stations because enough are missing or wrong in SCS
+track[which(track$DateTimeHST >= '2024-03-19 07:00:00' & track$DateTimeHST < "2024-03-20 18:00:00"),'Station.Number'] <- 1
+track[which(track$DateTimeHST >= '2024-03-21 19:00:00' & track$DateTimeHST < "2024-03-23 18:00:00"),'Station.Number'] <- 2
+track[which(track$DateTimeHST >= '2024-03-24 00:00:00' & track$DateTimeHST < "2024-03-25 12:00:00"),'Station.Number'] <- 3
+track[which(track$DateTimeHST >= '2024-03-25 18:00:00' & track$DateTimeHST < "2024-03-26 19:00:00"),'Station.Number'] <- 4
+track[which(track$DateTimeHST >= '2024-03-27 04:00:00' & track$DateTimeHST < "2024-03-28 12:00:00"),'Station.Number'] <- 5
+track[which(track$DateTimeHST >= '2024-03-28 17:00:00' & track$DateTimeHST < "2024-03-29 19:00:00"),'Station.Number'] <- 6
+track[which(track$DateTimeHST >= '2024-03-30 07:00:00' & track$DateTimeHST < "2024-03-31 07:00:00"),'Station.Number'] <- 7
+track[which(track$DateTimeHST >= '2024-03-31 18:00:00' & track$DateTimeHST < "2024-04-01 19:00:00"),'Station.Number'] <- 8
+track[which(track$DateTimeHST >= '2024-04-02 06:00:00' & track$DateTimeHST < "2024-04-03 06:00:00"),'Station.Number'] <- 9
+track[which(track$DateTimeHST >= '2024-04-03 18:00:00' & track$DateTimeHST < "2024-04-04 18:00:00"),'Station.Number'] <- 10
+track[which(track$DateTimeHST >= '2024-04-05 06:00:00' & track$DateTimeHST < "2024-04-06 06:00:00"),'Station.Number'] <- 11
+track[which(track$DateTimeHST >= '2024-04-06 18:00:00' & track$DateTimeHST < "2024-04-07 18:00:00"),'Station.Number'] <- 12
+track[which(track$DateTimeHST >= '2024-04-08 06:00:00' & track$DateTimeHST < "2024-04-09 06:00:00"),'Station.Number'] <- 13
+track[which(track$DateTimeHST >= '2024-04-09 18:00:00' & track$DateTimeHST < "2024-04-10 18:00:00"),'Station.Number'] <- 14
+track[which(track$DateTimeHST >= '2024-04-10 18:00:00' & track$DateTimeHST < "2024-04-11 18:00:00"),'Station.Number'] <- 15
+track[which(track$DateTimeHST >= '2024-04-12 06:00:00' & track$DateTimeHST < "2024-04-13 06:00:00"),'Station.Number'] <- 16
+track[which(track$DateTimeHST >= '2024-04-13 06:00:00'),'Station.Number'] <- 17
+# Add rounded times for easier insertion into the report
+track$hm <- format(round_date(track$DateTimeHST, unit='1 minute'), '%H%M')
+track <- track %>% 
+  mutate(DateTimeHST=round_date(DateTimeHST, unit = 'minute')) %>% 
+  filter(Trigger.Name %in% c('CTD Deploy', 'CTD Recovred', 'Bongo Deploy', 'Bongo Recovered', 'Tucker Deploy', 'Tucker Recovered', "6' IKMT Deploy", "6' IKMT Recovered"))
+track$Location <- ifelse(track$Station.Number < 6, 'Cyclonic 1', ifelse(track$Station.Number >= 13, 'Cyclonic 2', 'Anti-Cyclonic'))
+track$Day.Night <- ifelse(as.ITime(track$hm) > as.ITime('06:50:00') & as.ITime(track$hm) < as.ITime('18:50:00'), 'day', 'night')
+
+ctdPts[which(ctdPts$Station < 6), 'Location'] <- 'Cyclonic 1'
+ctdPts[which(ctdPts$Station  >= 6 & ctdPts$Station < 13), 'Location'] <- 'Anti-Cyclonic'
+ctdPts[which(ctdPts$Station >= 13), 'Location'] <- 'Cyclonic 2'
+
+# Staff
+staff <- data.frame(read_xlsx('SE2403 Science Party.xlsx', sheet = 1))
+
+# net tow logs
+# Here we are turning dates and times into datetime objects, calulating mean depths, rounding variables for nicer printing in the report, and prepping data to be merged into one datasheet
+# bongo
+bongo <- read_xlsx('TowedGear/SE2403_Bongo_data.xlsx', sheet=2) %>% 
+  data.frame() %>% 
+  mutate(Station=as.numeric(str_sub(Station.ID, 1, 2)), Tow=row_number(), DateTimeHST=as.POSIXct(paste(Date, Tow.start.time.HST), format='%Y-%m-%d %H:%M'), DateTimeHST_end=as.POSIXct(paste(Date, Tow.end.time.HST), format='%Y-%m-%d %H:%M'), lat=round(START.LAT.decimal.degrees,2), lon=round(START.LON.decimal.degrees, 2)) %>% 
+  rowwise() %>%  
+  mutate(MaxDepth_m=max(c(TDR.depth.m, TDR.depth2.m), na.rm=T)) %>% data.frame()
+bongo$MaxDepth_m[which(bongo$MaxDepth_m <= 0)] <- NA
+
+# Tucker
+tucker <- read_xlsx('TowedGear/SE2403_Tucker_trawl_data.xlsx', sheet=2) %>% 
+  data.frame()
+idfix <- c('1.1', '2.2', '2.3', '3.0', '4.1', '5.1', '8.2', '10.2', '16.1', '17.1')
+idxfix <- c(1,6,7,9,13,15,23,26,37,39)
+tucker[idxfix, 'Station.ID'] <- idfix
+tucker <- tucker %>% 
+  mutate(DateTimeHST=as.POSIXct(paste(Date, Tow.start.time), format='%Y-%m-%d %H:%M'), Station=as.numeric(str_sub(Station.ID, 1, 2)), Tow=row_number(), lat=round(START.LAT.decimal.degrees,2), lon=round(START.LON.decimal.degrees, 2)) %>% 
+  rowwise() %>%  
+  mutate(MaxDepth_m=max(c(TDR_1_depth..m., TDR.2_depth..m.), na.rm=T)) %>% data.frame()
+# Since some tucker trawls were before midnight and some after, but all tow dates are before midnight, the TowDate column calculates the date the tow actually happened so we can merge it with the SCS data
+tucker$TowDate <- ifelse((tucker$Day.Night == 'Night' & as.numeric(str_sub(tucker$Tow.start.time, 1, 2)) < 7), tucker$Date + 86400, tucker$Date)
+tucker$TowDate <- as.Date(tucker$TowDate/86400, origin = '1970-01-01', tz='HST')
+tucker[9,'TowDate'] <- tucker[9,'TowDate']-1
+tucker$TowDateTimeHST <- as.POSIXct(paste(tucker$TowDate, tucker$Tow.start.time), format = "%Y-%m-%d %H:%M")
+# Calculating tow end times, using the night time tows to add an extra day to the date. 
+tucker$DateTimeHST_e <- ifelse(tucker$Day.Night == 'Night', tucker$Date+86400, tucker$Date)
+tucker$DateTimeHST_end <-as.POSIXct(paste(as.Date(tucker$DateTimeHST_e/86400, origin = '1970-01-01', tz='HST'), tucker$Tow.end.time), format = "%Y-%m-%d %H:%M")
+# Fix evening tows that finished before midnight
+tucker$DateTimeHST_end[3] <- tucker$DateTimeHST_end[3]-86400
+tucker$DateTimeHST_end[9] <- tucker$DateTimeHST_end[9]-86400
+# Put NA's in for tows that have no TDR data
+tucker$MaxDepth_m[which(tucker$MaxDepth_m <= 0)] <- NA
+
+# IKMT
+ikmt <- read_xlsx('TowedGear/SE2403_IKMT_data.xlsx', sheet=2) %>% 
+  data.frame() %>% 
+mutate(Station=as.numeric(str_sub(Station.ID, 1, 2)), Tow=row_number(), DateTimeHST=as.POSIXct(paste(Date, Tow_start_time), format='%Y-%m-%d %H:%M'), lat=round(START.LAT.decimal.degrees,2), lon=round(START.LON.decimal.degrees, 2), DateTimeHST_end=as.POSIXct(paste(Date, Tow_end_time), format='%Y-%m-%d %H:%M')) %>% 
+  rowwise() %>%  
+  mutate(MaxDepth_m=max(c(TDR_1_depth, TDR_2_depth), na.rm=T)) %>% data.frame()
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Make one large combined dataset with all operations in chronological order. Using join_by and the between() fuction here, so need to calculate a time window for the deploy times. I still would like to do a 'near' match but not seeing a way to do that. 
+
+# combine all net operation datasets
+vars <- c('Station', 'Tow','Day.Night', 'DateTimeHST', 'DateTimeHST_end', 'MaxDepth_m', 'lon', 'lat')
+netops <- tucker %>% 
+  dplyr::select(Station, Tow, Day.Night, TowDateTimeHST, DateTimeHST_end, MaxDepth_m, lon, lat) %>%
+  rename(DateTimeHST=TowDateTimeHST) %>% 
+  bind_cols(Gear='Tucker') %>% 
+  bind_rows(bind_cols(ikmt[,vars], Gear='IKMT')) %>% 
+  bind_rows(bind_cols(bongo[,vars], Gear='bongo')) %>% 
+  arrange(DateTimeHST) %>% 
+  rename(Lon=lon, Lat=lat) %>% 
+  mutate(Tow=as.numeric(Tow))
+
+allGear <- CTDlog %>% 
+  mutate(Gear='CTD', Lon=abs(Lon), DateTimeHST_end=NA) %>% 
+  dplyr::select(Station, Tow, Day.Night, DateTimeHST, DateTimeHST_end, MaxDepth_m, Lon, Lat, Gear) %>% 
+  bind_rows(netops) %>% 
+  arrange(DateTimeHST) %>% 
+  mutate(hm=format(round_date(DateTimeHST, unit='1 minute'), '%H%M'), hm_end=format(round_date(DateTimeHST_end, unit='1 minute'), '%H%M'))
+allGear$Day.Night <- tolower(allGear$Day.Night)
+
+# Filling in missing recovery times for the IKMT
+idx_missing <- which(is.na(allGear$DateTimeHST_end) & allGear$Gear != 'CTD')
+idx_track <- c(29, 182, 376) # missing end times 
+allGear[idx_missing,'hm_end'] <- track[idx_track,'hm']
+
+# Filling in missing deploy location for bongo
+idx_missing <- which(is.na(allGear$Lon))
+allGear[idx_missing,c('Lon')] <- abs(track[143, c('Longitude')])
+allGear[idx_missing,c('Lat')] <- track[143, c('Latitude')]
+  
+```
+
+
+<!--
+Below are the figures I want to include in the report. 
+
+I'm doing this by eddy, I think that makes the most sense. 
+-->
+
+```{r message=FALSE, include=FALSE}
+# Get environmental data for SLA and SSH to make the maps. I'm using metR for the maps as I found them really easy to work with and made a nice visual. 
+
+# Set domain from SCS data
+lat1 = min(track$Latitude)-2  #14
+lat2 <- max(track$Latitude) + 2  #22
+lon1 = min(track$Longitude)+5  #-165
+lon2 <- max(track$Longitude) - 5  #-145
+time1 <- paste0(as.IDate(min(track$DateTimeHST)), 'T00:00:00Z')
+time2 <- paste0(as.IDate(max(track$DateTimeHST)), 'T00:00:00Z')
+
+# Download SLA data through ERDDAP
+slaInfo <- info(url = 'https://coastwatch.noaa.gov/erddap', datasetid = 'noaacwBLENDEDsshDaily')
+# slaDat <- griddap(slaInfo, time = c(time1, time2), latitude = c(lat1,lat2), longitude = c(lon1, lon2),
+#                   #fields = sshInfo$variables$variable_name[1],
+#                   stride = c(1,1,1),
+#                   store=disk('SE2403_sla2'))
+slaFile <- list.files(path='SE2403_sla2/', pattern='.nc', full.names = T)
+slaAll <- brick(slaFile, varname='sla')
+
+uvInfo <- info(url = 'https://coastwatch.noaa.gov/erddap', datasetid = 'noaacwBLENDEDNRTcurrentsDaily')
+# uvDat <- griddap(uvInfo, time = c(time1, time2), latitude = c(lat1,lat2), longitude = c(lon1, lon2),
+#                   stride = c(1,1,1),
+#                   store=disk('SE2403_cur2'))
+uvFile <- list.files(path='SE2403_cur2/', pattern='.nc', full.names = T)
+uAll <- brick(uvFile, varname='u_current')
+vAll <- brick(uvFile, varname='v_current')
+
+```
+
+
+**VESSEL:** \hangindent=1.5in \tabto{1.5in} 
+NOAA Ship *Oscar Elton Sette*, Project SE-24-03
+
+**PROJECT**  
+**PERIOD:** \tabto{1.5in} 
+March 18--April 14, 2024
+
+**AREA OF**
+$\vspace{-6pt}$
+
+**OPERATION:**
+\hangindent=1.5in \tabto{1.5in} Operations were conducted in the waters to the south of the Hawaiian Islands from Pearl Harbor to 16.3°N, 160.05°W (Fig. 1).
+
+
+**TYPE OF**
+$\vspace{-6pt}$
+
+**OPERATION:** 
+\hangindent=1.5in \tabto{1.5in} 
+Conductivity-temperature-depth (CTD) casts to 1000 m depth were conducted outside, at the edge, and at the center of an anticyclonic and a cyclonic open ocean eddy to the south of the Hawaiian archipelago, near 21°N, 159.2°W and 18°N, 159.5°W for the cyclonic and anticyclonic eddy respectively. Replicated 6 foot Isaaks-Kidd Midwater Trawl (IKMT) yo-yo tows down in the top 50 m were conducted at 0830 and 2030 daily at 15 stations, an oblique bongo tow down to ~200 m was conducted at 1100 and 2300 daily at 15 stations, and an oblique Tucker Trawl tow down to ~ 550 m was conducted at 1230 and 0030 daily at 17 stations. Finally, two additional CTDs were conducted at 1500 and 0300 daily to collect water for eDNA analysis. Additionally, opportunistic Tucker, bongo, and IKMT tows were conducted when time allowed. Acoustic backscatter was collected during transit times between stations and the ADCP collected data while we were on station.
+
+\setlength{\leftskip}{0in}
+
+
+**ITINERARY:**
+
+18 March 
+\hangindent=1in \tabto{1in} 
+0900 Start of project (all times in HST). Embarked `r staff$Name[-12]` and `r staff$Name[12]`. Proceeded to first station in the center of a cyclonic eddy to the southwest of O\textquoteleft ahu. Began active acoustics (EK80) data collection. Throughout the project, EK80 data was collected during all transits but secured during station operations. 
+
+\setlength{\leftskip}{0in}
+
+`r strftime(track$DateTimeHST[1], format='%d %B')` 
+\hangindent=1in \tabto{1in}  <!--# this moves the text in on the same row as the date-->
+`r track$hm[1]` Paused EK80 data collection and began Station 1 (center of cyclonic eddy) daytime sampling at `r round(track$Latitude[1],2)`°N, `r abs(round(track$Longitude[1],2))`°W with CTD cast 1 to 1000 m. The CTD computer crashed on the upcast before any bottles were fired. CTD was terminated and brought back to the surface at `r track$hm[3]`.
+
+\setlength{\leftskip}{1in}
+`r allGear$hm[1]` Began IKMT tow `r allGear$Tow[1]` yo-yoed between the surface and `r allGear$MaxDepth_m[1]` m at `r allGear$Lat[1]`°N, `r allGear$Lon[1]`°W. `r track$hm[5]` IKMT tow `r allGear$Tow[1]` completed.
+
+`r allGear$hm[2]` Began bongo tow `r allGear$Tow[2]` down to `r allGear$MaxDepth_m[2]` m at `r allGear$Lat[2]`°N, `r allGear$Lon[2]`°W. `r track$hm[7]` Bongo tow 1 completed.
+
+`r allGear$hm[3]` Began `r allGear$Gear[3]` tow `r allGear$Tow[3]` down to `r allGear$MaxDepth_m[3]` m at `r allGear$Lat[3]`°N, `r allGear$Lon[3]`°W. `r paste(track$hm[8], allGear$Gear[3], 'tow', allGear$Tow[3], 'completed.')` CTD not functional so the two planned CTDs for eDNA water collection were canceled. Finished station `r paste(allGear$Station[3], allGear$Day.Night[3])` sampling, reset for station `r paste(allGear$Station[4], allGear$Day.Night[4])` operations. 
+
+Began station 1 night operations. CTD was not functional, but we continued other planned station operations to train deck crew and scientists. `r allGear$hm[4]` Began IKMT tow `r allGear$Tow[4]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[4]` m at `r allGear$Lat[4]`°N, `r allGear$Lon[4]`°W. `r track$hm[17]` IKMT tow `r allGear$Tow[4]` completed. 
+
+`r allGear$hm[5]` Began IKMT tow `r allGear$Tow[5]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[5]` m at `r allGear$Lat[5]`°N, `r allGear$Lon[5]`°W. `r track$hm[19]` IKMT tow `r allGear$Tow[5]` completed.
+
+`r allGear$hm[6]` Began bongo tow `r allGear$Tow[6]` down to `r allGear$MaxDepth_m[6]` m at `r allGear$Lat[6]`°N, `r allGear$Lon[6]`°W. `r track$hm[21]` Bongo tow 1 completed.
+
+\setlength{\leftskip}{0in}
+
+`r strftime(allGear$DateTimeHST[7], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[7]` Began `r allGear$Gear[7]` tow `r allGear$Tow[7]` down to `r allGear$MaxDepth_m[7]` m at `r allGear$Lat[7]`°N, `r allGear$Lon[7]`°W. `r paste(track$hm[23], allGear$Gear[7], 'tow', allGear$Tow[7], 'completed.')` Finished station `r paste(allGear$Station[7], allGear$Day.Night[7])` sampling. We hoped the CTD would be fixed so we remained at station 1 for another cycle of day sampling. 
+
+\setlength{\leftskip}{1in}
+Began station 1 day operations. CTD was still not functional, but we continued other planned station operations. `r allGear$hm[8]` Began IKMT tow `r allGear$Tow[9]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[8]` m at `r allGear$Lat[8]`°N, `r allGear$Lon[8]`°W. `r track$hm[27]` IKMT tow `r allGear$Tow[8]` completed. 
+
+`r allGear$hm[9]` Began IKMT tow `r allGear$Tow[9]`, the second tow of the sampling cycle,  yo-yoed between the surface and `r allGear$MaxDepth_m[9]` m at `r allGear$Lat[9]`°N, `r allGear$Lon[9]`°W. `r track$hm[29]` IKMT tow `r allGear$Tow[9]` completed.
+
+`r allGear$hm[10]` Began bongo tow `r allGear$Tow[10]` down to `r allGear$MaxDepth_m[10]` m at `r allGear$Lat[10]`°N, `r allGear$Lon[10]`°W. `r track$hm[31]` Bongo tow `r allGear$Tow[10]` completed. CTD was still not functional and station operations were terminated. The ship returned to O\textquoteleft ahu for small boat transfer of CTD and generator parts. Commenced EK80 data collection. 
+
+\setlength{\leftskip}{0in}
+
+<!-- March 21 -->
+`r strftime(allGear$DateTimeHST[11], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[11]` Arrival at station `r allGear$Station[11]`, paused EK80 data collection. CTD still not functional. Conducted opportunistic Tucker trawls while waiting instead of conducting regular station operations. 
+
+\setlength{\leftskip}{1in}
+
+Began `r allGear$Gear[11]` tow `r allGear$Tow[11]` down to `r allGear$MaxDepth_m[11]` m at `r allGear$Lat[11]`°N, `r allGear$Lon[11]`°W. `r paste(track$hm[33], allGear$Gear[11], 'tow', allGear$Tow[11], 'completed.')`
+
+\setlength{\leftskip}{0in}
+
+<!-- March 22 -->
+`r strftime(allGear$DateTimeHST[12], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[12]` Continued `r allGear$Gear[12]` operations with tow `r allGear$Tow[12]` down to `r allGear$MaxDepth_m[12]` m at `r allGear$Lat[12]`°N, `r allGear$Lon[12]`°W. `r paste(track$hm[35], allGear$Gear[12], 'tow', allGear$Tow[12], 'completed.')`
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[13]` Continued `r allGear$Gear[13]` operations with tow `r allGear$Tow[13]` down to `r allGear$MaxDepth_m[13]` m at `r allGear$Lat[13]`°N, `r allGear$Lon[13]`°W. `r paste(allGear$hm_end[13], allGear$Gear[13], 'tow', allGear$Tow[13], 'completed.')` Finished opportunistic Tucker night sampling at station `r paste(allGear$Station[13])`. 
+
+CTD was still not functional, but we resumed planned day sampling. `r allGear$hm[14]` Began IKMT tow `r allGear$Tow[14]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[14]` m at `r allGear$Lat[14]`°N, `r allGear$Lon[14]`°W. `r allGear$hm_end[14]` IKMT tow `r allGear$Tow[14]` completed. 
+
+`r allGear$hm[15]` Began IKMT tow `r allGear$Tow[15]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[15]` m at `r allGear$Lat[15]`°N, `r allGear$Lon[15]`°W. `r allGear$hm_end[15]` IKMT tow `r allGear$Tow[15]` completed.
+
+`r allGear$hm[16]` Began bongo tow `r allGear$Tow[16]` down to `r allGear$MaxDepth_m[16]` m at `r allGear$Lat[16]`°N, `r allGear$Lon[16]`°W. `r allGear$hm_end[16]` Bongo tow `r allGear$Tow[16]` completed.
+
+`r allGear$hm[17]` Began `r allGear$Gear[17]` tow `r allGear$Tow[17]` down to `r allGear$MaxDepth_m[17]` m at `r allGear$Lat[17]`°N, `r allGear$Lon[17]`°W. `r paste(allGear$hm_end[17], allGear$Gear[17], 'tow', allGear$Tow[17], 'completed.')` Finished station `r paste(allGear$Station[17], allGear$Day.Night[17])` sampling, reset for station `r paste(allGear$Station[18], allGear$Day.Night[18])` operations. 
+
+CTD functional so we started a new 24-hour sampling cycle at station 2. `r allGear$hm[18]` Began station `r allGear$Station[18]` (outside of cyclonic eddy) `r allGear$Day.Night[18]` sampling at `r allGear$Lat[18]`°N, `r allGear$Lon[18]`°W with a CTD cast `r allGear$Tow[18]` to `r allGear$MaxDepth_m[18]` m. `r track$hm[48]` CTD recovered. 
+
+`r allGear$hm[19]` Began IKMT tow `r allGear$Tow[19]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[19]` m at `r allGear$Lat[19]`°N, `r allGear$Lon[19]`°W. `r track$hm[50]` IKMT tow `r allGear$Tow[19]` completed. Because the CTD got a late start we only conducted one IKMT tow at this station to make up lost time. 
+
+`r allGear$hm[20]` Began bongo tow `r allGear$Tow[20]` down to `r allGear$MaxDepth_m[20]` m at `r allGear$Lat[20]`°N, `r allGear$Lon[20]`°W. `r allGear$hm_end[20]` Bongo tow `r allGear$Tow[20]` completed.
+
+\setlength{\leftskip}{0in}
+
+<!-- March 23 -->
+`r strftime(allGear$DateTimeHST[21], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[21]` Began `r allGear$Gear[21]` tow `r allGear$Tow[21]` down to `r allGear$MaxDepth_m[21]` m at `r allGear$Lat[21]`°N, `r allGear$Lon[21]`°W. `r paste(allGear$hm_end[21], allGear$Gear[21], 'tow', allGear$Tow[21], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[22]` Began CTD cast `r allGear$Tow[22]` at `r allGear$Lat[22]`°N, `r allGear$Lon[22]`°W down to `r allGear$MaxDepth_m[22]` m for eDNA water collection. `r track$hm[56]` CTD completed.
+
+`r allGear$hm[23]` Began CTD cast `r allGear$Tow[23]` at `r allGear$Lat[23]`°N, `r allGear$Lon[23]`°W down to `r allGear$MaxDepth_m[23]` m for eDNA water collection. `r track$hm[58]` CTD completed, reset for station `r paste(allGear$Station[24], allGear$Day.Night[24])` operations.
+
+`r allGear$hm[24]` Began station `r paste(allGear$Station[24], allGear$Day.Night[24])` sampling at `r allGear$Lat[24]`°N, `r allGear$Lon[24]`°W with CTD cast `r allGear$Tow[24]` to `r allGear$MaxDepth_m[24]` m. 
+
+`r allGear$hm[25]` Began IKMT tow `r allGear$Tow[25]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[25]` m at `r allGear$Lat[25]`°N, `r allGear$Lon[25]`°W. `r allGear$hm_end[25]` IKMT tow `r allGear$Tow[19]` completed. 
+
+`r allGear$hm[26]` Began IKMT tow `r allGear$Tow[26]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[26]` m at `r allGear$Lat[26]`°N, `r allGear$Lon[26]`°W. `r allGear$hm_end[26]` IKMT tow `r allGear$Tow[26]` completed. 
+
+`r allGear$hm[27]` Began bongo tow `r allGear$Tow[27]` down to `r allGear$MaxDepth_m[27]` m at `r allGear$Lat[27]`°N, `r allGear$Lon[27]`°W. `r allGear$hm_end[27]` Bongo tow `r allGear$Tow[27]` completed.
+
+`r allGear$hm[28]` Began `r allGear$Gear[28]` tow `r allGear$Tow[28]` down to `r allGear$MaxDepth_m[28]` m at `r allGear$Lat[28]`°N, `r allGear$Lon[28]`°W. `r paste(allGear$hm_end[28], allGear$Gear[28], 'tow', allGear$Tow[28], 'completed.')` 
+
+`r allGear$hm[29]` Began CTD cast `r allGear$Tow[29]` at `r allGear$Lat[29]`°N, `r allGear$Lon[29]`°W down to `r allGear$MaxDepth_m[29]` m for eDNA water collection. `r track$hm[68]` CTD completed.
+
+`r allGear$hm[30]` Began CTD cast `r allGear$Tow[30]` at `r allGear$Lat[23]`°N, `r allGear$Lon[30]`°W down to `r allGear$MaxDepth_m[30]` m for eDNA water collection. `r track$hm[70]` CTD completed, commenced EK80 data collection, and transited to the next station. 
+
+\setlength{\leftskip}{0in}
+
+<!-- March 24 -->
+`r strftime(allGear$DateTimeHST[31], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+Transited to station 3 during the night. Stopped at `r allGear$hm[31]` for an opportunistic Tucker tow down to `r allGear$MaxDepth_m[31]` m at `r allGear$Lat[31]`°N, `r allGear$Lon[31]`°W. `r paste(allGear$hm_end[31], allGear$Gear[31], 'tow', allGear$Tow[31], 'completed.')`. The wire out reader on the starboard winch froze numerous times during deployment and retrieval. Winch wire out readings were unreliable. Additionally, the FastCat showed some spikes in temperature and salinity and froze once, possibly due to weird angle of the wire (i.e., potentially pinched).
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[32]` Arrived at station `r allGear$Station[32]`, paused EK80 data collection, and began `r allGear$Day.Night[32]` sampling at `r allGear$Lat[32]`°N, `r allGear$Lon[32]`°W with CTD cast `r allGear$Tow[32]` to `r allGear$MaxDepth_m[32]` m. `r track$hm[74]` CTD recovered. 
+
+`r allGear$hm[33]` Began IKMT tow `r allGear$Tow[33]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[33]` m at `r allGear$Lat[33]`°N, `r allGear$Lon[33]`°W. `r allGear$hm_end[33]` IKMT tow `r allGear$Tow[33]` completed. 
+
+`r allGear$hm[34]` Began IKMT tow `r allGear$Tow[34]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[34]` m at `r allGear$Lat[34]`°N, `r allGear$Lon[34]`°W. `r allGear$hm_end[34]` IKMT tow `r allGear$Tow[34]` completed.
+
+`r allGear$hm[35]` Began bongo tow `r allGear$Tow[35]` down to `r allGear$MaxDepth_m[35]` m at `r allGear$Lat[35]`°N, `r allGear$Lon[35]`°W.  `r allGear$hm_end[35]` Bongo tow `r allGear$Tow[35]` completed. Both cod ends were broken, likely due to repeated knocking into each other, thus no biological sample collected for this tow.
+
+`r allGear$hm[36]` Began `r allGear$Gear[36]` tow `r allGear$Tow[36]` down to `r allGear$MaxDepth_m[36]` m at `r allGear$Lat[36]`°N, `r allGear$Lon[36]`°W. `r paste(track$hm[78], allGear$Gear[36], 'tow', allGear$Tow[36], 'completed.')` 
+
+`r allGear$hm[37]` Began CTD cast `r allGear$Tow[37]` at `r allGear$Lat[37]`°N, `r allGear$Lon[37]`°W down to `r allGear$MaxDepth_m[37]` m for eDNA water collection. `r track$hm[80]` CTD cast `r allGear$Tow[37]` completed.
+
+`r allGear$hm[38]` Began CTD cast `r allGear$Tow[38]` at `r allGear$Lat[38]`°N, `r allGear$Lon[38]`°W down to `r allGear$MaxDepth_m[38]` m for eDNA water collection. `r track$hm[82]` CTD cast `r allGear$Tow[38]` completed, reset for `r allGear$Day.Night[39]` operations.
+
+`r allGear$hm[39]` Began `r allGear$Day.Night[39]` sampling at `r allGear$Lat[39]`°N, `r allGear$Lon[39]`°W with CTD cast `r allGear$Tow[39]` to `r allGear$MaxDepth_m[39]` m. `r track$hm[84]` CTD recovered. 
+
+`r allGear$hm[40]` Began IKMT tow `r allGear$Tow[40]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[40]` m at `r allGear$Lat[40]`°N, `r allGear$Lon[40]`°W. `r allGear$hm_end[40]` IKMT tow `r allGear$Tow[40]` completed. 
+
+`r allGear$hm[41]` Began IKMT tow `r allGear$Tow[41]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[41]` m at `r allGear$Lat[41]`°N, `r allGear$Lon[41]`°W. `r allGear$hm_end[41]` IKMT tow `r allGear$Tow[41]` completed.
+
+`r allGear$hm[42]` Began bongo tow `r allGear$Tow[42]` down to `r allGear$MaxDepth_m[42]` m at `r allGear$Lat[42]`°N, `r allGear$Lon[42]`°W. `r allGear$hm_end[42]` Bongo tow `r allGear$Tow[42]` completed. FastCat not working. Rips found along the seam in the bongo net, likely due to strong currents that caused the cod ends to break during daytime operations.
+
+\setlength{\leftskip}{0in}
+
+<!-- March 25 -->
+`r strftime(allGear$DateTimeHST[43], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[43]` Began `r allGear$Gear[43]` tow `r allGear$Tow[43]` down to `r allGear$MaxDepth_m[43]` m at `r allGear$Lat[43]`°N, `r allGear$Lon[43]`°W. `r paste(allGear$hm_end[43], allGear$Gear[43], 'tow', allGear$Tow[43], 'completed.')` FastCat not working, re-terminated during transit to the next station.
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[44]` Began CTD cast `r allGear$Tow[44]` at `r allGear$Lat[44]`°N, `r allGear$Lon[44]`°W down to `r allGear$MaxDepth_m[44]` m for eDNA water collection. `r track$hm[92]` CTD cast `r allGear$Tow[44]` recovered.
+
+`r allGear$hm[45]` Began CTD cast `r allGear$Tow[45]` at `r allGear$Lat[45]`°N, `r allGear$Lon[45]`°W down to `r allGear$MaxDepth_m[45]` m for eDNA water collection. `r track$hm[94]` CTD cast `r allGear$Tow[45]` recovered. 
+
+`r allGear$hm[46]` Began opportunistic Tucker trawl at the end of station 3 before transiting to station 4 down to `r allGear$MaxDepth_m[46]` m at `r allGear$Lat[46]`°N, `r allGear$Lon[46]`°W. `r paste(track$hm[96], allGear$Gear[46], 'tow', allGear$Tow[46], 'completed,')` commenced EK80 data collection, and transited to the next station.
+
+Slight diversion off course to look for the source of a distress call. Nothing was found and the coast guard took over the search with an aircraft. The diversion did not affect our ability to arrive at our next station on time. 
+
+`r allGear$hm[47]` Arrived at station `r allGear$Station[47]`, paused EK80 data collection, and began `r allGear$Day.Night[47]` sampling at `r allGear$Lat[47]`°N, `r allGear$Lon[47]`°W with CTD cast `r allGear$Tow[47]` to `r allGear$MaxDepth_m[47]` m. `r track$hm[98]` CTD cast `r allGear$Tow[47]` recovered. 
+
+`r allGear$hm[48]` Began IKMT tow `r allGear$Tow[48]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[48]` m at `r allGear$Lat[48]`°N, `r allGear$Lon[48]`°W. `r allGear$hm_end[48]` IKMT tow `r allGear$Tow[48]` completed. 
+
+`r allGear$hm[49]` Began IKMT tow `r allGear$Tow[49]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[49]` m at `r allGear$Lat[49]`°N, `r allGear$Lon[49]`°W. `r allGear$hm_end[49]` IKMT tow `r allGear$Tow[49]` completed.
+
+`r allGear$hm[50]` Began bongo tow `r allGear$Tow[50]` down to `r allGear$MaxDepth_m[50]` m at `r allGear$Lat[50]`°N, `r allGear$Lon[50]`°W. `r allGear$hm_end[50]` Bongo tow `r allGear$Tow[50]` completed. FastCat down again, re-terminated during the next transit. Additionally, the starboard winch wire out sensor froze permanently; ET reconnected during subsequent transit. In the meantime, we counted revolutions of the sensor wheel (assumed to be 1 meter of wire) to estimate wire out; the wire was marked with spray paint at target wire out.
+
+\setlength{\leftskip}{0in}
+
+<!--March 26-->
+`r strftime(allGear$DateTimeHST[51], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[51]` Began `r allGear$Gear[51]` tow `r allGear$Tow[51]` down to `r allGear$MaxDepth_m[51]` m at `r allGear$Lat[51]`°N, `r allGear$Lon[51]`°W. `r paste(track$hm[106], allGear$Gear[51], 'tow', allGear$Tow[51], 'completed.')` FastCat and wire out meter not working, wire out/net depth estimated by counting revolutions of the wire sensor wheel.
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[52]` Began CTD cast `r allGear$Tow[52]` at `r allGear$Lat[52]`°N, `r allGear$Lon[52]`°W down to `r allGear$MaxDepth_m[52]` m for eDNA water collection. `r track$hm[108]` CTD cast `r allGear$Tow[52]` recovered.
+
+`r allGear$hm[53]` Began CTD cast `r allGear$Tow[53]` at `r allGear$Lat[53]`°N, `r allGear$Lon[53]`°W down to `r allGear$MaxDepth_m[53]` m for eDNA water collection. `r track$hm[110]` CTD cast `r allGear$Tow[53]` completed, reset for `r allGear$Day.Night[54]` operations.
+
+`r allGear$hm[54]` Began `r allGear$Day.Night[54]` sampling at `r allGear$Lat[54]`°N, `r allGear$Lon[54]`°W with CTD cast `r allGear$Tow[54]` to `r allGear$MaxDepth_m[54]` m. 
+
+`r allGear$hm[55]` Began IKMT tow `r allGear$Tow[55]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[55]` m at `r allGear$Lat[55]`°N, `r allGear$Lon[55]`°W. `r allGear$hm_end[55]` IKMT tow `r allGear$Tow[55]` completed. 
+
+`r allGear$hm[56]` Began IKMT tow `r allGear$Tow[56]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[56]` m at `r allGear$Lat[56]`°N, `r allGear$Lon[56]`°W. `r allGear$hm_end[56]` IKMT tow `r allGear$Tow[56]` completed.
+
+`r allGear$hm[57]` Began bongo tow `r allGear$Tow[57]` down to `r allGear$MaxDepth_m[57]` m at `r allGear$Lat[57]`°N, `r allGear$Lon[57]`°W. `r allGear$hm_end[57]` Bongo tow `r allGear$Tow[57]` completed. 
+
+`r allGear$hm[58]` Began `r allGear$Gear[58]` tow `r allGear$Tow[58]` down to `r allGear$MaxDepth_m[58]` m at `r allGear$Lat[58]`°N, `r allGear$Lon[58]`°W. `r paste(allGear$hm_end[58], allGear$Gear[58], 'tow', allGear$Tow[58], 'completed.')` 
+
+`r allGear$hm[59]` Began CTD cast `r allGear$Tow[59]` at `r allGear$Lat[59]`°N, `r allGear$Lon[59]`°W down to `r allGear$MaxDepth_m[59]` m for eDNA water collection.  `r track$hm[116]` CTD cast `r allGear$Tow[59]` recovered.
+
+`r allGear$hm[60]` Began CTD cast `r allGear$Tow[60]` at `r allGear$Lat[60]`°N, `r allGear$Lon[60]`°W down to `r allGear$MaxDepth_m[60]` m for eDNA water collection. `r track$hm[118]` CTD cast `r allGear$Tow[60]` completed, commenced EK80 data collection, and transited to the next station.
+
+\setlength{\leftskip}{0in}
+
+<!--March 27-->
+`r strftime(allGear$DateTimeHST[61], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[61]` Opportunistic bongo sampling before daytime operations. Conducted bongo tow `r allGear$Tow[61]` down to `r allGear$MaxDepth_m[61]` m at `r allGear$Lat[61]`°N, `r allGear$Lon[61]`°W. `r allGear$hm_end[61]` Opportunistic bongo tow `r allGear$Tow[61]` completed. 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[62]` Arrived at station `r allGear$Station[62]`, paused EK80 data collection, and began `r allGear$Day.Night[62]` sampling at `r allGear$Lat[62]`°N, `r allGear$Lon[62]`°W with CTD cast `r allGear$Tow[62]` to `r allGear$MaxDepth_m[62]` m. 
+
+`r allGear$hm[63]` Began IKMT tow `r allGear$Tow[63]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[63]` m at `r allGear$Lat[63]`°N, `r allGear$Lon[63]`°W. `r allGear$hm_end[63]` IKMT tow `r allGear$Tow[63]` completed. 
+
+`r allGear$hm[64]` Began IKMT tow `r allGear$Tow[64]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[64]` m at `r allGear$Lat[64]`°N, `r allGear$Lon[64]`°W. `r allGear$hm_end[64]` IKMT tow `r allGear$Tow[64]` completed. Wire out counter was functional again. 
+
+`r allGear$hm[65]` Began bongo tow `r allGear$Tow[65]` down to `r allGear$MaxDepth_m[65]` m at `r allGear$Lat[65]`°N, `r allGear$Lon[65]`°W. `r allGear$hm_end[65]` Bongo tow `r allGear$Tow[65]` completed. FastCat was functional again. 
+
+`r allGear$hm[66]` Began `r allGear$Gear[66]` tow `r allGear$Tow[66]` down to `r allGear$MaxDepth_m[66]` m at `r allGear$Lat[66]`°N, `r allGear$Lon[66]`°W. `r paste(allGear$hm_end[66], allGear$Gear[66], 'tow', allGear$Tow[66], 'completed.')` Tucker deployed with both FastCat and Simrad Cobb trawl net sensor to see if Simrad sensor can be used as a back-up if the FastCat were to malfunction again. Both sensors worked and showed consistent data. 
+
+`r allGear$hm[67]` Began CTD cast `r allGear$Tow[67]` at `r allGear$Lat[67]`°N, `r allGear$Lon[67]`°W down to `r allGear$MaxDepth_m[67]` m for eDNA water collection.  `r track$hm[133]` CTD cast `r allGear$Tow[67]` recovered.
+
+`r allGear$hm[68]` Began CTD cast `r allGear$Tow[68]` at `r allGear$Lat[68]`°N, `r allGear$Lon[68]`°W down to `r allGear$MaxDepth_m[68]` m for eDNA water collection. `r track$hm[135]` CTD cast `r allGear$Tow[68]` completed, reset for `r allGear$Day.Night[69]` operations.
+
+`r allGear$hm[69]` Began `r allGear$Day.Night[69]` sampling at `r allGear$Lat[69]`°N, `r allGear$Lon[69]`°W with CTD cast `r allGear$Tow[69]` to `r allGear$MaxDepth_m[69]` m. `r track$hm[137]` CTD cast `r allGear$Tow[69]` recovered.
+
+`r allGear$hm[70]` Began IKMT tow `r allGear$Tow[70]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[70]` m at `r allGear$Lat[70]`°N, `r allGear$Lon[70]`°W. `r allGear$hm_end[70]` IKMT tow `r allGear$Tow[70]` completed. 
+
+`r allGear$hm[71]` Began IKMT tow `r allGear$Tow[71]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[71]` m at `r allGear$Lat[71]`°N, `r allGear$Lon[71]`°W. `r allGear$hm_end[71]` IKMT tow `r allGear$Tow[71]` completed.
+
+`r allGear$hm[72]` Began bongo tow `r allGear$Tow[72]` down to `r allGear$MaxDepth_m[72]` m at `r allGear$Lat[72]`°N, `r allGear$Lon[72]`°W. `r allGear$hm_end[72]` Bongo tow `r allGear$Tow[72]` completed. 
+
+\setlength{\leftskip}{0in}
+
+<!--March 28-->
+`r strftime(allGear$DateTimeHST[73], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[73]` Began `r allGear$Gear[73]` tow `r allGear$Tow[73]` down to `r allGear$MaxDepth_m[73]` m at `r allGear$Lat[73]`°N, `r allGear$Lon[73]`°W. `r paste(allGear$hm_end[73], allGear$Gear[73], 'tow', allGear$Tow[73], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[74]` Began CTD cast `r allGear$Tow[74]` at `r allGear$Lat[74]`°N, `r allGear$Lon[74]`°W down to `r allGear$MaxDepth_m[74]` m for eDNA water collection.  `r track$hm[148]` CTD cast `r allGear$Tow[74]` recovered.
+
+`r allGear$hm[75]` Began CTD cast `r allGear$Tow[75]` at `r allGear$Lat[75]`°N, `r allGear$Lon[75]`°W down to `r allGear$MaxDepth_m[75]` m for eDNA water collection. `r track$hm[150]` CTD cast `r allGear$Tow[75]` completed.
+
+`r allGear$hm[76]` Began an opportunistic `r allGear$Gear[76]` tow `r allGear$Tow[76]` at the end of station 5 before transit to station 6 down to `r allGear$MaxDepth_m[76]` m at `r allGear$Lat[76]`°N, `r allGear$Lon[76]`°W. `r paste(allGear$hm_end[76], allGear$Gear[76], 'tow', allGear$Tow[76], 'completed, commenced EK80  data collection, and transited to the next station.')`
+
+<!-- Station 6 -->
+`r allGear$hm[77]` Arrived at station `r allGear$Station[77]`, paused EK80 data collection, and began `r allGear$Day.Night[77]` sampling at `r allGear$Lat[77]`°N, `r allGear$Lon[77]`°W with CTD cast `r allGear$Tow[77]` to `r allGear$MaxDepth_m[77]` m. `r track$hm[154]` CTD cast `r allGear$Tow[77]` recovered.
+
+`r allGear$hm[78]` Began IKMT tow `r allGear$Tow[78]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[78]` m at `r allGear$Lat[78]`°N, `r allGear$Lon[78]`°W. `r allGear$hm_end[78]` IKMT tow `r allGear$Tow[78]` completed. 
+
+`r allGear$hm[79]` Began IKMT tow `r allGear$Tow[79]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[79]` m at `r allGear$Lat[79]`°N, `r allGear$Lon[79]`°W. `r allGear$hm_end[79]` IKMT tow `r allGear$Tow[79]` completed. 
+
+`r allGear$hm[80]` Began bongo tow `r allGear$Tow[80]` down to `r allGear$MaxDepth_m[80]` m at `r allGear$Lat[80]`°N, `r allGear$Lon[80]`°W. `r allGear$hm_end[80]` Bongo tow `r allGear$Tow[80]` completed. 
+
+\setlength{\leftskip}{0in}
+
+<!--March 29-->
+`r strftime(allGear$DateTimeHST[81], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[81]` Began `r allGear$Gear[81]` tow `r allGear$Tow[81]` down to `r allGear$MaxDepth_m[81]` m at `r allGear$Lat[81]`°N, `r allGear$Lon[81]`°W. `r paste(allGear$hm_end[81], allGear$Gear[81], 'tow', allGear$Tow[81], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[82]` Began CTD cast `r allGear$Tow[82]` at `r allGear$Lat[82]`°N, `r allGear$Lon[82]`°W down to `r allGear$MaxDepth_m[82]` m for eDNA water collection.  `r track$hm[162]` CTD cast `r allGear$Tow[82]` recovered. The filtration pump broke and while the scientists were swapping it out, the ship started resetting for day operations. When the scientists noticed this after 9 nm, the ship stopped and eDNA sampling commenced once the new pump was installed. 
+
+`r allGear$hm[83]` Began CTD cast `r allGear$Tow[83]` at `r allGear$Lat[83]`°N, `r allGear$Lon[83]`°W down to `r allGear$MaxDepth_m[83]` m for eDNA water collection. `r track$hm[165]` CTD cast `r allGear$Tow[83]` completed, reset for `r allGear$Day.Night[84]` operations.
+
+`r allGear$hm[84]` Began `r allGear$Day.Night[84]` sampling at `r allGear$Lat[84]`°N, `r allGear$Lon[84]`°W with CTD cast `r allGear$Tow[84]` to `r allGear$MaxDepth_m[84]` m. `r track$hm[167]` CTD cast `r allGear$Tow[84]` recovered.
+
+`r allGear$hm[85]` Began IKMT tow `r allGear$Tow[85]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[85]` m at `r allGear$Lat[85]`°N, `r allGear$Lon[85]`°W. `r allGear$hm_end[85]` IKMT tow `r allGear$Tow[85]` completed. 
+
+`r allGear$hm[86]` Began IKMT tow `r allGear$Tow[86]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[86]` m at `r allGear$Lat[86]`°N, `r allGear$Lon[86]`°W. `r allGear$hm_end[86]` IKMT tow `r allGear$Tow[86]` completed. 
+
+`r allGear$hm[87]` Began bongo tow `r allGear$Tow[87]` down to `r allGear$MaxDepth_m[87]` m at `r allGear$Lat[87]`°N, `r allGear$Lon[87]`°W. `r allGear$hm_end[87]` Bongo tow `r allGear$Tow[87]` completed. 
+
+`r allGear$hm[88]` Began `r allGear$Gear[88]` tow `r allGear$Tow[88]` down to `r allGear$MaxDepth_m[88]` m at `r allGear$Lat[88]`°N, `r allGear$Lon[88]`°W. `r paste(allGear$hm_end[88], allGear$Gear[88], 'tow', allGear$Tow[88], 'completed.')` 
+
+`r allGear$hm[89]` Began CTD cast `r allGear$Tow[89]` at `r allGear$Lat[89]`°N, `r allGear$Lon[89]`°W down to `r allGear$MaxDepth_m[89]` m for eDNA water collection.  `r track$hm[177]` CTD cast `r allGear$Tow[89]` recovered.
+
+`r allGear$hm[90]` Began CTD cast `r allGear$Tow[90]` at `r allGear$Lat[90]`°N, `r allGear$Lon[90]`°W down to `r allGear$MaxDepth_m[90]` m for eDNA water collection. `r track$hm[179]` CTD cast `r allGear$Tow[90]` completed, commenced EK80 data collection, and transited to next station.
+
+\setlength{\leftskip}{0in}
+
+<!--March 30-->
+<!-- Station 7 -->
+`r strftime(allGear$DateTimeHST[91], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[91]` Arrived at station `r allGear$Station[91]`, paused EK80 data collection, and began `r allGear$Day.Night[91]` sampling at `r allGear$Lat[91]`°N, `r allGear$Lon[91]`°W with CTD cast `r allGear$Tow[91]` to `r allGear$MaxDepth_m[91]` m. `r track$hm[181]` CTD cast `r allGear$Tow[91]` recovered.
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[92]` Began IKMT tow `r allGear$Tow[92]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[92]` m at `r allGear$Lat[92]`°N, `r allGear$Lon[92]`°W. `r allGear$hm_end[92]` IKMT tow `r allGear$Tow[92]` completed. 
+
+`r allGear$hm[93]` Began IKMT tow `r allGear$Tow[93]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[93]` m at `r allGear$Lat[93]`°N, `r allGear$Lon[93]`°W. `r allGear$hm_end[93]` IKMT tow `r allGear$Tow[93]` completed. Upon retrieval of the last IKMT, the paravane snagged on the ship and the welds holding one of the arms on broke and the paravane itself bent slightly. Engineering were called and were able to repair it in time for the next IKMT operations. 
+
+`r allGear$hm[94]` Began bongo tow `r allGear$Tow[94]` down to `r allGear$MaxDepth_m[94]` m at `r allGear$Lat[94]`°N, `r allGear$Lon[94]`°W. `r allGear$hm_end[94]` Bongo tow `r allGear$Tow[94]` completed. FastCat stopped working, so bongo was deployed with TDRs only. 
+
+`r allGear$hm[95]` Began `r allGear$Gear[95]` tow `r allGear$Tow[95]` down to `r allGear$MaxDepth_m[95]` m at `r allGear$Lat[95]`°N, `r allGear$Lon[95]`°W. `r paste(allGear$hm_end[95], allGear$Gear[95], 'tow', allGear$Tow[95], 'completed.')` FastCat not functional, but Simrad sensor was working well and was be deployed on all subsequent Tucker trawls. 
+
+`r allGear$hm[96]` Began CTD cast `r allGear$Tow[96]` at `r allGear$Lat[96]`°N, `r allGear$Lon[96]`°W down to `r allGear$MaxDepth_m[96]` m for eDNA water collection.  `r track$hm[190]` CTD cast `r allGear$Tow[96]` recovered.
+
+`r allGear$hm[97]` Began CTD cast `r allGear$Tow[97]` at `r allGear$Lat[97]`°N, `r allGear$Lon[97]`°W down to `r allGear$MaxDepth_m[97]` m for eDNA water collection. `r track$hm[192]` CTD cast `r allGear$Tow[97]` completed, reset for `r allGear$Day.Night[98]` operations.
+
+Identified interference between the EK80 and ADCP which resulted in non-usable EK80 data. Decided to toggle the ADCP and EK80 data collection. While on station, we collect ADCP data only because the ship must see subsurface currents when the gear is in the water. While transiting, the ADCP was secure and we collected EK80 data only. The speed logger, which also has the potential of interfering with the EK80, was secured during transit but turned on during station operations. 
+
+`r allGear$hm[98]` Began `r allGear$Day.Night[98]` sampling at `r allGear$Lat[98]`°N, `r allGear$Lon[98]`°W with CTD cast `r allGear$Tow[98]` to `r allGear$MaxDepth_m[98]` m. `r track$hm[194]` CTD cast `r allGear$Tow[98]` recovered.
+
+`r allGear$hm[99]` Began IKMT tow `r allGear$Tow[99]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[99]` m at `r allGear$Lat[99]`°N, `r allGear$Lon[99]`°W. `r allGear$hm_end[99]` IKMT tow `r allGear$Tow[99]` completed. 
+
+`r allGear$hm[100]` Began IKMT tow `r allGear$Tow[100]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[100]` m at `r allGear$Lat[100]`°N, `r allGear$Lon[100]`°W. `r allGear$hm_end[100]` IKMT tow `r allGear$Tow[100]` completed. 
+
+`r allGear$hm[101]` Began bongo tow `r allGear$Tow[101]` down to `r allGear$MaxDepth_m[101]` m at `r allGear$Lat[101]`°N, `r allGear$Lon[101]`°W. `r allGear$hm_end[101]` Bongo tow `r allGear$Tow[101]` completed. Max depth shy of the 210 m target depth because ship speed was too fast and winch payout speed too slow, so we could not hit the 45° wire angle we needed. 
+
+`r allGear$hm[102]` Began `r allGear$Gear[102]` tow `r allGear$Tow[102]` down to `r allGear$MaxDepth_m[102]` m at `r allGear$Lat[102]`°N, `r allGear$Lon[102]`°W. 
+
+\setlength{\leftskip}{0in}
+
+<!--March 31-->
+`r strftime(allGear$DateTimeHST[103], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r paste(allGear$hm_end[102], allGear$Gear[102], 'tow', allGear$Tow[102], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[103]` Began CTD cast `r allGear$Tow[103]` at `r allGear$Lat[103]`°N, `r allGear$Lon[103]`°W down to `r allGear$MaxDepth_m[103]` m for eDNA water collection.  `r track$hm[204]` CTD cast `r allGear$Tow[103]` recovered.
+
+`r allGear$hm[104]` Began CTD cast `r allGear$Tow[104]` at `r allGear$Lat[104]`°N, `r allGear$Lon[104]`°W down to `r allGear$MaxDepth_m[104]` m for eDNA water collection. `r track$hm[206]` CTD cast `r allGear$Tow[104]` completed, secured ADCP, commenced EK80 data collection, and transited to the next station. 
+
+<!-- Station 8-->
+`r allGear$hm[105]` Arrived at station `r allGear$Station[105]`, paused EK80 data collection, commenced ADCP data collection, and began `r allGear$Day.Night[105]` sampling at `r allGear$Lat[105]`°N, `r allGear$Lon[105]`°W with CTD cast `r allGear$Tow[105]` to `r allGear$MaxDepth_m[105]` m. `r track$hm[208]` CTD cast `r allGear$Tow[105]` recovered.
+
+`r allGear$hm[106]` Began IKMT tow `r allGear$Tow[106]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[106]` m at `r allGear$Lat[106]`°N, `r allGear$Lon[106]`°W. The tow start time was delayed 30 minutes due to bad weather. `r allGear$hm_end[106]` IKMT tow `r allGear$Tow[106]` completed. 
+
+`r allGear$hm[107]` Began IKMT tow `r allGear$Tow[107]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[107]` m at `r allGear$Lat[107]`°N, `r allGear$Lon[107]`°W. `r allGear$hm_end[107]` IKMT tow `r allGear$Tow[107]` completed. 
+
+`r allGear$hm[108]` Began bongo tow `r allGear$Tow[108]` down to `r allGear$MaxDepth_m[108]` m at `r allGear$Lat[108]`°N, `r allGear$Lon[108]`°W. `r allGear$hm_end[108]` Bongo tow `r allGear$Tow[108]` completed. 
+
+\setlength{\leftskip}{0in}
+
+<!--April 1-->
+`r strftime(allGear$DateTimeHST[109], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[109]` Began `r allGear$Gear[109]` tow `r allGear$Tow[109]` down to `r allGear$MaxDepth_m[109]` m at `r allGear$Lat[109]`°N, `r allGear$Lon[109]`°W. `r paste(allGear$hm_end[109], allGear$Gear[109], 'tow', allGear$Tow[109], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[110]` Began CTD cast `r allGear$Tow[110]` at `r allGear$Lat[110]`°N, `r allGear$Lon[110]`°W down to `r allGear$MaxDepth_m[110]` m for eDNA water collection.
+
+`r allGear$hm[111]` Began CTD cast `r allGear$Tow[111]` at `r allGear$Lat[111]`°N, `r allGear$Lon[111]`°W down to `r allGear$MaxDepth_m[111]` m for eDNA water collection. `r track$hm[218]` CTD cast `r allGear$Tow[111]` completed, reset for `r allGear$Day.Night[112]` operations.
+
+`r allGear$hm[112]` Began `r allGear$Day.Night[112]` sampling at `r allGear$Lat[112]`°N, `r allGear$Lon[112]`°W with CTD cast `r allGear$Tow[112]` to `r allGear$MaxDepth_m[112]` m. `r track$hm[220]` CTD cast `r allGear$Tow[112]` recovered.
+
+`r allGear$hm[113]` Began IKMT tow `r allGear$Tow[113]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[113]` m at `r allGear$Lat[113]`°N, `r allGear$Lon[113]`°W. `r allGear$hm_end[113]` IKMT tow `r allGear$Tow[113]` completed. 
+
+`r allGear$hm[114]` Began IKMT tow `r allGear$Tow[114]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[114]` m at `r allGear$Lat[114]`°N, `r allGear$Lon[114]`°W. `r allGear$hm_end[114]` IKMT tow `r allGear$Tow[114]` completed. 
+
+`r allGear$hm[115]` Began bongo tow `r allGear$Tow[115]` down to `r allGear$MaxDepth_m[115]` m at `r allGear$Lat[115]`°N, `r allGear$Lon[115]`°W. Began following strict 300 m wire out with a 45° wire angle protocol at this station and at all subsequent stations. Note: The ship's bare steerage was ~1.5 knots so we could not slow down more than that while towing, making it difficult to reach a 45° wire angle due to slower than ideal payout speeds. From this point forward, max depth for bongo tows were variable and likely shallower than protocol dictates. `r allGear$hm_end[115]` Bongo tow `r allGear$Tow[115]` completed. 
+
+`r allGear$hm[116]` Began `r allGear$Gear[116]` tow `r allGear$Tow[116]` down to `r allGear$MaxDepth_m[116]` m at `r allGear$Lat[116]`°N, `r allGear$Lon[116]`°W. The net took almost one hour to equilibrate at target depth. `r paste(allGear$hm_end[116], allGear$Gear[116], 'tow', allGear$Tow[116], 'completed.')` 
+
+`r allGear$hm[117]` Began CTD cast `r allGear$Tow[117]` at `r allGear$Lat[117]`°N, `r allGear$Lon[117]`°W down to `r allGear$MaxDepth_m[117]` m for eDNA water collection. `r track$hm[231]` CTD cast `r allGear$Tow[118]` completed
+
+`r allGear$hm[118]` Began CTD cast `r allGear$Tow[118]` at `r allGear$Lat[118]`°N, `r allGear$Lon[118]`°W down to `r allGear$MaxDepth_m[118]` m for eDNA water collection. `r track$hm[233]` CTD cast `r allGear$Tow[118]` completed, secured ADCP, commenced EK80 data collection, and transited to the next station.
+
+\setlength{\leftskip}{0in}
+
+<!-- April 02 -->
+<!-- Station 9 -->
+`r strftime(allGear$DateTimeHST[119], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[119]` Arrived at station `r allGear$Station[119]`, paused EK80 data collection, commenced ADCP data collection, and began `r allGear$Day.Night[119]` sampling at `r allGear$Lat[119]`°N, `r allGear$Lon[119]`°W with CTD cast `r allGear$Tow[119]` to `r allGear$MaxDepth_m[119]` m. `r track$hm[235]` CTD cast `r allGear$Tow[119]` recovered.
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[120]` Began IKMT tow `r allGear$Tow[120]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[120]` m at `r allGear$Lat[120]`°N, `r allGear$Lon[120]`°W. `r allGear$hm_end[120]` IKMT tow `r allGear$Tow[120]` completed. 
+
+`r allGear$hm[121]` Began IKMT tow `r allGear$Tow[121]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[121]` m at `r allGear$Lat[121]`°N, `r allGear$Lon[121]`°W. `r allGear$hm_end[121]` IKMT tow `r allGear$Tow[121]` completed.
+
+`r allGear$hm[122]` Began bongo tow `r allGear$Tow[122]` down to `r allGear$MaxDepth_m[122]` m at `r allGear$Lat[122]`°N, `r allGear$Lon[122]`°W. `r allGear$hm_end[122]` Bongo tow `r allGear$Tow[122]` completed. 
+
+`r allGear$hm[123]` Began `r allGear$Gear[123]` tow `r allGear$Tow[123]` down to `r allGear$MaxDepth_m[123]` m at `r allGear$Lat[123]`°N, `r allGear$Lon[123]`°W. `r paste(allGear$hm_end[123], allGear$Gear[123], 'tow', allGear$Tow[123], 'completed.')` 
+
+`r allGear$hm[124]` Began CTD cast `r allGear$Tow[124]` at `r allGear$Lat[124]`°N, `r allGear$Lon[124]`°W down to `r allGear$MaxDepth_m[124]` m for eDNA water collection.  `r track$hm[245]` CTD cast `r allGear$Tow[124]` recovered. CO called an all stop for operations due to immediate need to pump sewage. Second eDNA CTD cancelled for station 9 day operations. Reset for `r allGear$Day.Night[125]` operations. 
+
+`r allGear$hm[125]` Began `r allGear$Day.Night[125]` sampling at `r allGear$Lat[125]`°N, `r allGear$Lon[125]`°W with CTD cast `r allGear$Tow[125]` to `r allGear$MaxDepth_m[125]` m. `r track$hm[247]` CTD cast `r allGear$Tow[125]` recovered. 
+
+All operations cancelled due to unsafe weather conditions with winds 15-26 knots with a mixed swell. Transited to next station. 
+
+\setlength{\leftskip}{0in}
+
+<!--Station 10-->
+<!--April 3-->
+`r strftime(allGear$DateTimeHST[126], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[126]` Arrived at station `r allGear$Station[126]`, paused EK80 data collection, commenced ADCP data collection, and began `r allGear$Day.Night[126]` sampling at `r allGear$Lat[126]`°N, `r allGear$Lon[126]`°W with CTD cast `r allGear$Tow[126]` to `r allGear$MaxDepth_m[126]` m.
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[127]` Began IKMT tow `r allGear$Tow[127]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[127]` m at `r allGear$Lat[127]`°N, `r allGear$Lon[127]`°W. `r allGear$hm_end[127]` IKMT tow `r allGear$Tow[127]` completed. 
+
+`r allGear$hm[128]` Began IKMT tow `r allGear$Tow[128]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[128]` m at `r allGear$Lat[128]`°N, `r allGear$Lon[128]`°W. `r allGear$hm_end[128]` IKMT tow `r allGear$Tow[128]` completed.
+
+`r allGear$hm[129]` Began bongo tow `r allGear$Tow[129]` down to `r allGear$MaxDepth_m[129]` m at `r allGear$Lat[129]`°N, `r allGear$Lon[129]`°W. `r allGear$hm_end[129]` Bongo tow `r allGear$Tow[129]` completed. 
+
+`r allGear$hm[130]` Began `r allGear$Gear[130]` tow `r allGear$Tow[130]` down to `r allGear$MaxDepth_m[130]` m at `r allGear$Lat[130]`°N, `r allGear$Lon[130]`°W. 
+
+\setlength{\leftskip}{0in}
+
+<!--April 4-->
+`r strftime(allGear$DateTimeHST[131], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r paste(allGear$hm_end[130], allGear$Gear[130], 'tow', allGear$Tow[130], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[131]` Began CTD cast `r allGear$Tow[131]` at `r allGear$Lat[131]`°N, `r allGear$Lon[131]`°W down to `r allGear$MaxDepth_m[131]` m for eDNA water collection. `r track$hm[259]` CTD cast `r allGear$Tow[131]` completed
+
+`r allGear$hm[132]` Began CTD cast `r allGear$Tow[132]` at `r allGear$Lat[132]`°N, `r allGear$Lon[132]`°W down to `r allGear$MaxDepth_m[132]` m for eDNA water collection. `r track$hm[261]` CTD cast `r allGear$Tow[132]` completed, reset for `r allGear$Day.Night[133]` operations.
+
+`r allGear$hm[133]` Began `r allGear$Day.Night[133]` sampling at `r allGear$Lat[133]`°N, `r allGear$Lon[133]`°W with CTD cast `r allGear$Tow[133]` to `r allGear$MaxDepth_m[133]` m. `r track$hm[263]` CTD cast `r allGear$Tow[133]` recovered. Winds and swell picked up and we assessed weather conditions for each operation. 
+
+`r allGear$hm[134]` Began IKMT tow `r allGear$Tow[134]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[134]` m at `r allGear$Lat[134]`°N, `r allGear$Lon[134]`°W. `r allGear$hm_end[134]` IKMT tow `r allGear$Tow[134]` completed. 
+
+`r allGear$hm[135]` Began IKMT tow `r allGear$Tow[135]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[135]` m at `r allGear$Lat[135]`°N, `r allGear$Lon[135]`°W. `r allGear$hm_end[135]` IKMT tow `r allGear$Tow[135]` completed. 
+
+`r allGear$hm[136]` Began bongo tow `r allGear$Tow[136]` down to `r allGear$MaxDepth_m[136]` m at `r allGear$Lat[136]`°N, `r allGear$Lon[136]`°W. `r allGear$hm_end[136]` Bongo tow `r allGear$Tow[136]` completed. 
+
+`r allGear$hm[137]` Began `r allGear$Gear[137]` tow `r allGear$Tow[137]` down to `r allGear$MaxDepth_m[137]` m at `r allGear$Lat[137]`°N, `r allGear$Lon[137]`°W. The net took almost one hour to equilibrate at target depth. `r paste(allGear$hm_end[137], allGear$Gear[137], 'tow', allGear$Tow[137], 'completed.')` 
+
+`r allGear$hm[138]` Began CTD cast `r allGear$Tow[138]` at `r allGear$Lat[138]`°N, `r allGear$Lon[138]`°W down to `r allGear$MaxDepth_m[138]` m for eDNA water collection. `r track$hm[273]` CTD cast `r allGear$Tow[138]` completed
+
+`r allGear$hm[139]` Began CTD cast `r allGear$Tow[139]` at `r allGear$Lat[139]`°N, `r allGear$Lon[139]`°W down to `r allGear$MaxDepth_m[139]` m for eDNA water collection. `r track$hm[275]` CTD cast `r allGear$Tow[139]` completed, transited to next station. 
+
+Winds throughout the day held around 20–25 knots with a mixed swell. 
+
+\setlength{\leftskip}{0in}
+
+<!--April 5
+day ops - eDNA delayed due to weather
+night ops - largest Tucker catch to date
+-->
+<!-- Station 11 -->
+`r strftime(allGear$DateTimeHST[140], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[140]` Arrived at station `r allGear$Station[140]`, paused EK80 data collection, commenced ADCP data collection, and began `r allGear$Day.Night[140]` sampling at `r allGear$Lat[140]`°N, `r allGear$Lon[140]`°W with CTD cast `r allGear$Tow[140]` to `r allGear$MaxDepth_m[140]` m. `r track$hm[277]` CTD cast `r allGear$Tow[140]` recovered.
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[141]` Began IKMT tow `r allGear$Tow[141]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[141]` m at `r allGear$Lat[141]`°N, `r allGear$Lon[141]`°W. `r allGear$hm_end[141]` IKMT tow `r allGear$Tow[141]` completed. 
+
+`r allGear$hm[142]` Began IKMT tow `r allGear$Tow[142]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[142]` m at `r allGear$Lat[142]`°N, `r allGear$Lon[142]`°W. `r allGear$hm_end[142]` IKMT tow `r allGear$Tow[142]` completed.
+
+`r allGear$hm[143]` Began bongo tow `r allGear$Tow[143]` down to `r allGear$MaxDepth_m[143]` m at `r allGear$Lat[143]`°N, `r allGear$Lon[143]`°W. `r allGear$hm_end[143]` Bongo tow `r allGear$Tow[143]` completed. 
+
+`r allGear$hm[144]` Began `r allGear$Gear[144]` tow `r allGear$Tow[144]` down to `r allGear$MaxDepth_m[144]` m at `r allGear$Lat[144]`°N, `r allGear$Lon[144]`°W. `r paste(allGear$hm_end[144], allGear$Gear[144], 'tow', allGear$Tow[144], 'completed.')` 
+
+`r allGear$hm[145]` Began CTD cast `r allGear$Tow[145]` at `r allGear$Lat[145]`°N, `r allGear$Lon[145]`°W down to `r allGear$MaxDepth_m[145]` m for eDNA water collection. Delayed start to the CTD because of weather worsening. `r track$hm[287]` CTD cast `r allGear$Tow[145]` recovered. 
+
+`r allGear$hm[146]` Began CTD cast `r allGear$Tow[146]` at `r allGear$Lat[146]`°N, `r allGear$Lon[146]`°W down to `r allGear$MaxDepth_m[146]` m for eDNA water collection.  `r track$hm[289]` CTD cast `r allGear$Tow[146]` recovered, reset for `r allGear$Day.Night[147]` operations.
+
+`r allGear$hm[147]` Began `r allGear$Day.Night[147]` sampling at `r allGear$Lat[147]`°N, `r allGear$Lon[147]`°W with CTD cast `r allGear$Tow[147]` to `r allGear$MaxDepth_m[147]` m. `r track$hm[291]` CTD cast `r allGear$Tow[133]` recovered.  
+
+`r allGear$hm[148]` Began IKMT tow `r allGear$Tow[148]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[148]` m at `r allGear$Lat[148]`°N, `r allGear$Lon[148]`°W. `r allGear$hm_end[148]` IKMT tow `r allGear$Tow[148]` completed. 
+
+`r allGear$hm[149]` Began IKMT tow `r allGear$Tow[149]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[149]` m at `r allGear$Lat[149]`°N, `r allGear$Lon[149]`°W. `r allGear$hm_end[149]` IKMT tow `r allGear$Tow[149]` completed. 
+
+`r allGear$hm[150]` Began bongo tow `r allGear$Tow[150]` down to `r allGear$MaxDepth_m[150]` m at `r allGear$Lat[150]`°N, `r allGear$Lon[150]`°W. `r allGear$hm_end[150]` Bongo tow `r allGear$Tow[150]` completed. 
+
+\setlength{\leftskip}{0in}
+
+<!--April 6-->
+`r strftime(allGear$DateTimeHST[151], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[151]` Began `r allGear$Gear[151]` tow `r allGear$Tow[151]` down to `r allGear$MaxDepth_m[151]` m at `r allGear$Lat[151]`°N, `r allGear$Lon[151]`°W. `r paste(allGear$hm_end[151], allGear$Gear[151], 'tow', allGear$Tow[151], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[152]` Began CTD cast `r allGear$Tow[152]` at `r allGear$Lat[152]`°N, `r allGear$Lon[152]`°W down to `r allGear$MaxDepth_m[152]` m for eDNA water collection. `r track$hm[300]` CTD cast `r allGear$Tow[152]` completed
+
+`r allGear$hm[153]` Began CTD cast `r allGear$Tow[153]` at `r allGear$Lat[153]`°N, `r allGear$Lon[153]`°W down to `r allGear$MaxDepth_m[153]` m for eDNA water collection. `r track$hm[302]` CTD cast `r allGear$Tow[153]` completed, transited to next station.
+
+<!-- Station 12-->
+
+1900 arrived at station `r allGear$Station[154]`. Due to the wide direction of waves entering the longline pit, the first CTD of the station was cancelled. Instead, began `r allGear$Day.Night[154]` sampling at `r allGear$hm[154]` with IKMT tow `r allGear$Tow[154]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[154]` m at `r allGear$Lat[154]`°N, `r allGear$Lon[154]`°W. `r allGear$hm_end[154]` IKMT tow `r allGear$Tow[154]` completed. 
+
+`r allGear$hm[155]` Began IKMT tow `r allGear$Tow[155]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[155]` m at `r allGear$Lat[155]`°N, `r allGear$Lon[155]`°W. `r allGear$hm_end[155]` IKMT tow `r allGear$Tow[155]` completed. Weather improved and regular sampling commenced. 
+
+`r allGear$hm[156]` Began bongo tow `r allGear$Tow[156]` down to `r allGear$MaxDepth_m[156]` m at `r allGear$Lat[156]`°N, `r allGear$Lon[156]`°W. `r allGear$hm_end[156]` Bongo tow `r allGear$Tow[156]` completed. 
+
+`r allGear$hm[157]` Began `r allGear$Gear[157]` tow `r allGear$Tow[157]` down to `r allGear$MaxDepth_m[157]` m at `r allGear$Lat[157]`°N, `r allGear$Lon[157]`°W. 
+
+\setlength{\leftskip}{0in}
+
+<!--April 7-->
+`r strftime(allGear$DateTimeHST[158], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r paste(allGear$hm_end[157], allGear$Gear[157], 'tow', allGear$Tow[157], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[158]` Began CTD cast `r allGear$Tow[158]` at `r allGear$Lat[158]`°N, `r allGear$Lon[158]`°W down to `r allGear$MaxDepth_m[158]` m for eDNA water collection. Delayed start to the CTD because of weather worsening. 
+
+`r allGear$hm[159]` Began CTD cast `r allGear$Tow[159]` at `r allGear$Lat[159]`°N, `r allGear$Lon[159]`°W down to `r allGear$MaxDepth_m[159]` m for eDNA water collection.  `r track$hm[313]` CTD cast `r allGear$Tow[159]` recovered, reset for `r allGear$Day.Night[160]` operations.
+
+Weather conditions again delayed the start of the sampling cycle because the longline pit is vulnerable to swells. Instead, began `r allGear$Day.Night[160]` sampling at `r allGear$hm[160]` with IKMT tow `r allGear$Tow[160]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[160]` m at `r allGear$Lat[160]`°N, `r allGear$Lon[160]`°W. `r allGear$hm_end[160]` IKMT tow `r allGear$Tow[160]` completed. 
+
+`r allGear$hm[161]` Began IKMT tow `r allGear$Tow[161]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[161]` m at `r allGear$Lat[161]`°N, `r allGear$Lon[161]`°W. `r allGear$hm_end[161]` IKMT tow `r allGear$Tow[161]` completed. Continued on with net operations until weather conditions improved enough for a CTD. 
+
+`r allGear$hm[162]` Began bongo tow `r allGear$Tow[162]` down to `r allGear$MaxDepth_m[162]` m at `r allGear$Lat[162]`°N, `r allGear$Lon[162]`°W. `r allGear$hm_end[162]` Bongo tow `r allGear$Tow[162]` completed. 
+
+`r allGear$hm[163]` Weather improved enough to conduct CTD cast `r allGear$Tow[163]` at `r allGear$Lat[163]`°N, `r allGear$Lon[163]`°W to `r allGear$MaxDepth_m[163]` m. `r track$hm[321]` CTD cast `r allGear$Tow[163]` recovered.
+
+`r allGear$hm[164]` Began `r allGear$Gear[164]` tow `r allGear$Tow[164]` down to `r allGear$MaxDepth_m[164]` m at `r allGear$Lat[164]`°N, `r allGear$Lon[164]`°W. `r paste(allGear$hm_end[164], allGear$Gear[164], 'tow', allGear$Tow[164], 'completed.')` 
+
+`r allGear$hm[165]` Began CTD cast `r allGear$Tow[165]` at `r allGear$Lat[165]`°N, `r allGear$Lon[165]`°W down to `r allGear$MaxDepth_m[165]` m for eDNA water collection. `r track$hm[325]` CTD cast `r allGear$Tow[165]` recovered. 
+
+`r allGear$hm[166]` Began CTD cast `r allGear$Tow[166]` at `r allGear$Lat[166]`°N, `r allGear$Lon[166]`°W down to `r allGear$MaxDepth_m[166]` m for eDNA water collection.  `r track$hm[327]` CTD cast `r allGear$Tow[166]` recovered, transited to the next station.
+
+\setlength{\leftskip}{0in}
+
+<!--April 8-->
+<!-- Station 13 -->
+`r strftime(allGear$DateTimeHST[167], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[167]` Arrived at station `r allGear$Station[167]`, paused EK80 data collection, commenced ADCP data collection, and began `r allGear$Day.Night[167]` sampling at `r allGear$Lat[167]`°N, `r allGear$Lon[167]`°W with CTD cast `r allGear$Tow[167]` to `r allGear$MaxDepth_m[167]` m. `r track$hm[329]` CTD cast `r allGear$Tow[167]` recovered.
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[168]` Began IKMT tow `r allGear$Tow[168]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[168]` m at `r allGear$Lat[168]`°N, `r allGear$Lon[168]`°W. `r allGear$hm_end[168]` IKMT tow `r allGear$Tow[168]` completed. 
+
+`r allGear$hm[169]` Began IKMT tow `r allGear$Tow[169]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[169]` m at `r allGear$Lat[169]`°N, `r allGear$Lon[169]`°W. `r allGear$hm_end[169]` IKMT tow `r allGear$Tow[169]` completed.
+
+`r allGear$hm[170]` Began bongo tow `r allGear$Tow[170]` down to `r allGear$MaxDepth_m[170]` m at `r allGear$Lat[170]`°N, `r allGear$Lon[170]`°W. `r allGear$hm_end[170]` Bongo tow `r allGear$Tow[170]` completed. 
+
+`r allGear$hm[171]` Began `r allGear$Gear[171]` tow `r allGear$Tow[171]` down to `r allGear$MaxDepth_m[171]` m at `r allGear$Lat[171]`°N, `r allGear$Lon[171]`°W. `r paste(allGear$hm_end[171], allGear$Gear[171], 'tow', allGear$Tow[171], 'completed.')` 
+
+`r allGear$hm[172]` Began CTD cast `r allGear$Tow[172]` at `r allGear$Lat[172]`°N, `r allGear$Lon[172]`°W down to `r allGear$MaxDepth_m[172]` m for eDNA water collection. `r track$hm[339]` CTD cast `r allGear$Tow[172]` recovered. 
+
+`r allGear$hm[173]` Began CTD cast `r allGear$Tow[173]` at `r allGear$Lat[173]`°N, `r allGear$Lon[173]`°W down to `r allGear$MaxDepth_m[173]` m for eDNA water collection.  `r track$hm[341]` CTD cast `r allGear$Tow[173]` recovered, reset for `r allGear$Day.Night[174]` operations.
+
+`r allGear$hm[174]` Began `r allGear$Day.Night[174]` sampling at `r allGear$Lat[174]`°N, `r allGear$Lon[174]`°W with CTD cast `r allGear$Tow[174]` to `r allGear$MaxDepth_m[174]` m. `r track$hm[344]` CTD cast `r allGear$Tow[174]` recovered.
+
+`r allGear$hm[175]` Began IKMT tow `r allGear$Tow[175]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[175]` m at `r allGear$Lat[175]`°N, `r allGear$Lon[175]`°W. `r allGear$hm_end[175]` IKMT tow `r allGear$Tow[175]` completed. 
+
+`r allGear$hm[176]` Began IKMT tow `r allGear$Tow[176]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[176]` m at `r allGear$Lat[176]`°N, `r allGear$Lon[176]`°W. `r allGear$hm_end[176]` IKMT tow `r allGear$Tow[176]` completed.
+
+`r allGear$hm[177]` Began bongo tow `r allGear$Tow[177]` down to `r allGear$MaxDepth_m[177]` m at `r allGear$Lat[177]`°N, `r allGear$Lon[177]`°W. `r allGear$hm_end[177]` Bongo tow `r allGear$Tow[177]` completed. 
+
+`r allGear$hm[178]` Began `r allGear$Gear[178]` tow `r allGear$Tow[178]` down to `r allGear$MaxDepth_m[178]` m at `r allGear$Lat[178]`°N, `r allGear$Lon[178]`°W. 
+
+\setlength{\leftskip}{0in}
+
+<!--April 9-->
+`r strftime(allGear$DateTimeHST[179], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r paste(allGear$hm_end[178], allGear$Gear[178], 'tow', allGear$Tow[178], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[179]` Began CTD cast `r allGear$Tow[179]` at `r allGear$Lat[179]`°N, `r allGear$Lon[179]`°W down to `r allGear$MaxDepth_m[179]` m for eDNA water collection. `r track$hm[354]` CTD cast `r allGear$Tow[179]` recovered. 
+
+`r allGear$hm[180]` Began CTD cast `r allGear$Tow[180]` at `r allGear$Lat[180]`°N, `r allGear$Lon[180]`°W down to `r allGear$MaxDepth_m[180]` m for eDNA water collection.  `r track$hm[356]` CTD cast `r allGear$Tow[180]` recovered, secured ADCP, commenced EK80 data collection, and transited to the next station. 
+
+During transit to our next station, the neuston net was deployed from the port side outrigger. The net held steady at speeds up to 7.5 knots, even when on the weather side of the ship. More trouble shooting is needed to devise a method to pull the frame close to the ship to switch out cod ends without retrieving the whole net. 
+
+<!-- Station 14 -->
+ `r allGear$hm[181]` Arrived at station `r allGear$Station[181]`, paused EK80 data collection, commenced ADCP data collection, and began `r allGear$Day.Night[181]` sampling at `r allGear$Lat[181]`°N, `r allGear$Lon[181]`°W with CTD cast `r allGear$Tow[181]` to `r allGear$MaxDepth_m[181]` m. `r track$hm[358]` CTD cast `r allGear$Tow[181]` recovered.
+ 
+ `r allGear$hm[182]` Began IKMT tow `r allGear$Tow[182]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[182]` m at `r allGear$Lat[182]`°N, `r allGear$Lon[182]`°W. `r allGear$hm_end[182]` IKMT tow `r allGear$Tow[182]` completed. 
+
+`r allGear$hm[183]` Began IKMT tow `r allGear$Tow[183]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[183]` m at `r allGear$Lat[183]`°N, `r allGear$Lon[183]`°W. `r allGear$hm_end[183]` IKMT tow `r allGear$Tow[183]` completed.
+
+`r allGear$hm[184]` Began bongo tow `r allGear$Tow[184]` down to `r allGear$MaxDepth_m[184]` m at `r allGear$Lat[184]`°N, `r allGear$Lon[184]`°W. `r allGear$hm_end[184]` Bongo tow `r allGear$Tow[184]` completed. 
+
+`r allGear$hm[185]` Began `r allGear$Gear[185]` tow `r allGear$Tow[185]` down to `r allGear$MaxDepth_m[185]` m at `r allGear$Lat[185]`°N, `r allGear$Lon[185]`°W. 
+
+\setlength{\leftskip}{0in}
+
+<!--April 10-->
+`r strftime(allGear$DateTimeHST[186], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r paste(allGear$hm_end[185], allGear$Gear[185], 'tow', allGear$Tow[185], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[186]` Began CTD cast `r allGear$Tow[186]` at `r allGear$Lat[186]`°N, `r allGear$Lon[186]`°W down to `r allGear$MaxDepth_m[186]` m for eDNA water collection. `r track$hm[368]` CTD cast `r allGear$Tow[186]` recovered. 
+
+`r allGear$hm[187]` Began CTD cast `r allGear$Tow[187]` at `r allGear$Lat[187]`°N, `r allGear$Lon[187]`°W down to `r allGear$MaxDepth_m[187]` m for eDNA water collection.  `r track$hm[370]` CTD cast `r allGear$Tow[187]` recovered, reset for `r allGear$Day.Night[187]` operations.
+
+`r allGear$hm[188]` Began `r allGear$Day.Night[188]` sampling at `r allGear$Lat[188]`°N, `r allGear$Lon[188]`°W with CTD cast `r allGear$Tow[188]` to `r allGear$MaxDepth_m[188]` m. `r track$hm[372]` CTD cast `r allGear$Tow[188]` recovered.
+
+`r allGear$hm[189]` Began IKMT tow `r allGear$Tow[189]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[189]` m at `r allGear$Lat[189]`°N, `r allGear$Lon[189]`°W. `r allGear$hm_end[189]` IKMT tow `r allGear$Tow[189]` completed. 
+
+`r allGear$hm[190]` Began IKMT tow `r allGear$Tow[190]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[190]` m at `r allGear$Lat[190]`°N, `r allGear$Lon[190]`°W. `r allGear$hm_end[190]` IKMT tow `r allGear$Tow[190]` completed.
+
+`r allGear$hm[191]` Began bongo tow `r allGear$Tow[191]` down to `r allGear$MaxDepth_m[191]` m at `r allGear$Lat[191]`°N, `r allGear$Lon[191]`°W. `r allGear$hm_end[191]` Bongo tow `r allGear$Tow[191]` completed. 
+
+`r allGear$hm[192]` Began `r allGear$Gear[192]` tow `r allGear$Tow[192]` down to `r allGear$MaxDepth_m[192]` m at `r allGear$Lat[192]`°N, `r allGear$Lon[192]`°W. `r paste(allGear$hm_end[192], allGear$Gear[192], 'tow', allGear$Tow[192], 'completed.')` 
+
+`r allGear$hm[193]` Began CTD cast `r allGear$Tow[193]` at `r allGear$Lat[193]`°N, `r allGear$Lon[193]`°W down to `r allGear$MaxDepth_m[193]` m for eDNA water collection. `r track$hm[383]` CTD cast `r allGear$Tow[193]` recovered. 
+
+`r allGear$hm[194]` Began CTD cast `r allGear$Tow[194]` at `r allGear$Lat[194]`°N, `r allGear$Lon[194]`°W down to `r allGear$MaxDepth_m[194]` m for eDNA water collection.  `r track$hm[385]` CTD cast `r allGear$Tow[194]` recovered.
+
+`r allGear$hm[195]` Began an opportunistic CTD cast `r allGear$Tow[195]` at `r allGear$Lat[195]`°N, `r allGear$Lon[195]`°W down to `r allGear$MaxDepth_m[195]` m for eDNA water collection for methods comparisons. `r track$hm[388]` CTD cast `r allGear$Tow[195]` recovered, secured ADCP, commenced EK80 data collection, and transited to the next station.  
+
+<!-- Station 15 -->
+`r allGear$hm[196]` Arrived at station `r allGear$Station[196]`, paused EK80 data collection, commenced ADCP data collection, and began `r allGear$Day.Night[196]` sampling at `r allGear$Lat[196]`°N, `r allGear$Lon[196]`°W with CTD cast `r allGear$Tow[196]` to `r allGear$MaxDepth_m[196]` m. `r track$hm[390]` CTD cast `r allGear$Tow[196]` recovered.
+ 
+ `r allGear$hm[197]` Began IKMT tow `r allGear$Tow[197]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[197]` m at `r allGear$Lat[197]`°N, `r allGear$Lon[197]`°W. `r allGear$hm_end[197]` IKMT tow `r allGear$Tow[197]` completed. 
+
+`r allGear$hm[198]` Began IKMT tow `r allGear$Tow[198]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[198]` m at `r allGear$Lat[198]`°N, `r allGear$Lon[198]`°W. `r allGear$hm_end[198]` IKMT tow `r allGear$Tow[198]` completed.
+
+`r allGear$hm[199]` Began bongo tow `r allGear$Tow[199]` down to `r allGear$MaxDepth_m[199]` m at `r allGear$Lat[199]`°N, `r allGear$Lon[199]`°W. `r allGear$hm_end[199]` Bongo tow `r allGear$Tow[199]` completed. 
+
+`r allGear$hm[200]` Began `r allGear$Gear[200]` tow `r allGear$Tow[200]` down to `r allGear$MaxDepth_m[200]` m at `r allGear$Lat[200]`°N, `r allGear$Lon[200]`°W. 
+
+\setlength{\leftskip}{0in}
+
+<!--April 11-->
+`r strftime(allGear$DateTimeHST[201], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r paste(allGear$hm_end[200], allGear$Gear[200], 'tow', allGear$Tow[200], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[201]` Began CTD cast `r allGear$Tow[201]` at `r allGear$Lat[201]`°N, `r allGear$Lon[201]`°W down to `r allGear$MaxDepth_m[201]` m for eDNA water collection. `r track$hm[400]` CTD cast `r allGear$Tow[201]` recovered. 
+
+`r allGear$hm[202]` Began CTD cast `r allGear$Tow[202]` at `r allGear$Lat[202]`°N, `r allGear$Lon[202]`°W down to `r allGear$MaxDepth_m[202]` m for eDNA water collection.  `r track$hm[402]` CTD cast `r allGear$Tow[202]` recovered, reset for `r allGear$Day.Night[202]` operations.
+
+`r allGear$hm[203]` Began `r allGear$Day.Night[203]` sampling at `r allGear$Lat[203]`°N, `r allGear$Lon[203]`°W with CTD cast `r allGear$Tow[203]` to `r allGear$MaxDepth_m[203]` m. `r track$hm[404]` CTD cast `r allGear$Tow[203]` recovered.
+
+`r allGear$hm[204]` Began IKMT tow `r allGear$Tow[204]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[204]` m at `r allGear$Lat[204]`°N, `r allGear$Lon[204]`°W. `r allGear$hm_end[204]` IKMT tow `r allGear$Tow[204]` completed. 
+
+`r allGear$hm[205]` Began IKMT tow `r allGear$Tow[205]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[205]` m at `r allGear$Lat[205]`°N, `r allGear$Lon[205]`°W. `r allGear$hm_end[205]` IKMT tow `r allGear$Tow[205]` completed.
+
+`r allGear$hm[206]` Began bongo tow `r allGear$Tow[191]` down to `r allGear$MaxDepth_m[191]` m at `r allGear$Lat[191]`°N, `r allGear$Lon[191]`°W. `r allGear$hm_end[191]` Bongo tow `r allGear$Tow[191]` completed. 
+
+`r allGear$hm[207]` Began `r allGear$Gear[207]` tow `r allGear$Tow[207]` down to `r allGear$MaxDepth_m[207]` m at `r allGear$Lat[207]`°N, `r allGear$Lon[207]`°W. `r paste(allGear$hm_end[207], allGear$Gear[207], 'tow', allGear$Tow[207], 'completed.')` 
+
+`r allGear$hm[208]` Began CTD cast `r allGear$Tow[208]` at `r allGear$Lat[208]`°N, `r allGear$Lon[208]`°W down to `r allGear$MaxDepth_m[208]` m for eDNA water collection. `r track$hm[414]` CTD cast `r allGear$Tow[208]` recovered. 
+
+`r allGear$hm[209]` Began CTD cast `r allGear$Tow[209]` at `r allGear$Lat[209]`°N, `r allGear$Lon[209]`°W down to `r allGear$MaxDepth_m[209]` m for eDNA water collection.  `r track$hm[416]` CTD cast `r allGear$Tow[209]` recovered, secured ADCP, commenced EK80 data collection, and transited to the next station.  
+
+\setlength{\leftskip}{0in}
+
+<!-- Station 16 -->
+<!--April 12-->
+`r strftime(allGear$DateTimeHST[210], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r allGear$hm[210]` Arrived at station `r allGear$Station[210]`, paused EK80 data collection, commenced ADCP data collection, and began `r allGear$Day.Night[210]` sampling at `r allGear$Lat[210]`°N, `r allGear$Lon[210]`°W with CTD cast `r allGear$Tow[210]` to `r allGear$MaxDepth_m[210]` m. `r track$hm[418]` CTD cast `r allGear$Tow[210]` recovered.
+
+\setlength{\leftskip}{1in}
+
+Because of high winds we switched the order of operations around and started with the Tucker tow while we waited for the winds to abate to use the more sensitive gear. `r allGear$hm[211]` Began `r allGear$Gear[211]` tow `r allGear$Tow[211]` down to `r allGear$MaxDepth_m[211]` m at `r allGear$Lat[211]`°N, `r allGear$Lon[211]`°W. `r paste(allGear$hm_end[211], allGear$Gear[185], 'tow', allGear$Tow[211], 'completed.')` 
+ 
+`r allGear$hm[212]` Weather conditions improved enough for us to continue with sampling. Began IKMT tow `r allGear$Tow[212]` yo-yoed between the surface and `r allGear$MaxDepth_m[212]` m at `r allGear$Lat[212]`°N, `r allGear$Lon[212]`°W. `r allGear$hm_end[212]` IKMT tow `r allGear$Tow[212]` completed. Weather conditions improved enough for us to continue with sampling. Because of the delay due to windy conditions, we only conducted one daytime IKMT tow at station 16 to make up time and allow all gear to be able to sample. 
+
+`r allGear$hm[213]` Began bongo tow `r allGear$Tow[213]` down to `r allGear$MaxDepth_m[213]` m at `r allGear$Lat[213]`°N, `r allGear$Lon[213]`°W. `r allGear$hm_end[213]` Bongo tow `r allGear$Tow[213]` completed. 
+
+`r allGear$hm[214]` Began CTD cast `r allGear$Tow[214]` at `r allGear$Lat[214]`°N, `r allGear$Lon[214]`°W down to `r allGear$MaxDepth_m[214]` m for eDNA water collection. `r track$hm[426]` CTD cast `r allGear$Tow[214]` recovered. 
+
+`r allGear$hm[215]` Began CTD cast `r allGear$Tow[215]` at `r allGear$Lat[215]`°N, `r allGear$Lon[215]`°W down to `r allGear$MaxDepth_m[215]` m for eDNA water collection.  `r track$hm[428]` CTD cast `r allGear$Tow[215]` recovered, reset for `r allGear$Day.Night[215]` operations.
+
+`r allGear$hm[216]` Began `r allGear$Day.Night[216]` sampling at `r allGear$Lat[216]`°N, `r allGear$Lon[216]`°W with CTD cast `r allGear$Tow[216]` to `r allGear$MaxDepth_m[216]` m. `r track$hm[430]` CTD cast `r allGear$Tow[188]` recovered.
+
+`r allGear$hm[217]` Began IKMT tow `r allGear$Tow[217]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[217]` m at `r allGear$Lat[217]`°N, `r allGear$Lon[217]`°W. `r allGear$hm_end[217]` IKMT tow `r allGear$Tow[217]` completed. 
+
+`r allGear$hm[218]` Began IKMT tow `r allGear$Tow[218]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[218]` m at `r allGear$Lat[218]`°N, `r allGear$Lon[218]`°W. `r allGear$hm_end[218]` IKMT tow `r allGear$Tow[218]` completed.
+
+`r allGear$hm[219]` Began bongo tow `r allGear$Tow[219]` down to `r allGear$MaxDepth_m[219]` m at `r allGear$Lat[219]`°N, `r allGear$Lon[219]`°W. `r allGear$hm_end[219]` Bongo tow `r allGear$Tow[219]` completed. 
+
+`r allGear$hm[220]` Began `r allGear$Gear[220]` tow `r allGear$Tow[220]` down to `r allGear$MaxDepth_m[220]` m at `r allGear$Lat[220]`°N, `r allGear$Lon[220]`°W. 
+
+\setlength{\leftskip}{0in}
+
+<!--April 13-->
+`r strftime(allGear$DateTimeHST[221], format='%d %B')` 
+\hangindent=1in \tabto{1in} 
+`r paste(allGear$hm_end[220], allGear$Gear[220], 'tow', allGear$Tow[220], 'completed.')` 
+
+\setlength{\leftskip}{1in}
+
+`r allGear$hm[221]` Began CTD cast `r allGear$Tow[221]` at `r allGear$Lat[221]`°N, `r allGear$Lon[221]`°W down to `r allGear$MaxDepth_m[221]` m for eDNA water collection. `r track$hm[440]` CTD cast `r allGear$Tow[221]` recovered. 
+
+`r allGear$hm[222]` Began CTD cast `r allGear$Tow[222]` at `r allGear$Lat[222]`°N, `r allGear$Lon[222]`°W down to `r allGear$MaxDepth_m[222]` m for eDNA water collection.  `r track$hm[442]` CTD cast `r allGear$Tow[222]` recovered, secured ADCP, commenced EK80 data collection, and transited to the next station. 
+
+<!-- Station 17 opportunistic -->
+
+0800 arrived at station `r allGear$Station[223]` and began opportunistic sampling. Because this was an unpaired station, meaning there was no nighttime sampling, we focused on ichthyoplankton and voucher specimen collections over the shelf drop-off area southeast of O\textquoteleft ahu towards Penguin Bank. `r allGear$hm[223]` Began IKMT tow `r allGear$Tow[223]`, the first tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[223]` m at `r allGear$Lat[223]`°N, `r allGear$Lon[223]`°W. `r allGear$hm_end[223]` IKMT tow `r allGear$Tow[223]` completed. 
+
+`r allGear$hm[224]` Began IKMT tow `r allGear$Tow[224]`, the second tow of the sampling cycle, yo-yoed between the surface and `r allGear$MaxDepth_m[224]` m at `r allGear$Lat[224]`°N, `r allGear$Lon[224]`°W. `r allGear$hm_end[224]` IKMT tow `r allGear$Tow[224]` completed.
+
+`r allGear$hm[225]` Began a deep `r allGear$Gear[225]` tow `r allGear$Tow[225]` down to `r allGear$MaxDepth_m[225]` m at `r allGear$Lat[225]`°N, `r allGear$Lon[225]`°W. `r paste(allGear$hm_end[225], allGear$Gear[225], 'tow', allGear$Tow[225], 'completed.')`. This concluded the sampling for SE2403. Ended ADCP data collection, commenced active acoustics data collection, and began transit back to Pearl Harbor.
+
+\setlength{\leftskip}{0in}
+
+<!--April 14-->
+April 14 
+\hangindent=1in \tabto{1in} 
+0900 Returned to Pearl Harbor. Ended active acoustics data collection. Disembark `r staff$Name[-12]` and `r staff$Name[12]`.
+
+\setlength{\leftskip}{0in}
+
+**MISSIONS AND RESULTS:**
+
+A.  Conduct routine conductivity-temperature-depth (CTD) casts to a maximum 1000 m, continuous acoustic Doppler current profiler (ADCP) and thermosalinograph (TSG) measurements along the length of the project track to describe the physical environment in the ocean in the center, edge, and outside of oceanographic features such as eddies and fronts.  
+
+     1. During this project, we visited two eddies: one cyclonic and one anticyclonic, over 17 stations where each sampling cycle spanned over a 22 h period (Fig. 1). Stations were located near the center (stations 3,7,10,11), edge (stations 2,4,8,11,14), and outside (stations 5,6,9,12,13,16) of each eddy. Two additional stations, one without a functioning CTD (station 1) and one for opportunistic sampling only (station 17), were sampled as well. Station locations were determined daily using near real time remotely sensed sea surface heigh anomaly data with derrived currents from Windy (windy.com; which uses Copernicus data) and NOAA's RADSs Sea Level Anomaly data (Dataset ID: noaacwBLENDEDsshDaily) provided through CoastWatch ShipWatch Service.  
+     
+     2. During the first CTD cast of the cruise on 19 March the ship lost all communication ability with the CTD. The problem was resolved on 22 March, five days into the survey. Because the CTD is an essential piece of equipment, only opportunistic sampling was possible during times when the CTD was not functional, and planned station sampling could only start once the CTD was working. Once fixed, the CTD worked consistently for the remainder of the survey. 
+
+     3. A total of `r length(allGear$Tow[which(allGear$Gear == 'CTD')])` fully successful CTD casts were conducted (Table 1); 2 casts at each station (`r nrow(allGear[which(allGear$Gear == 'CTD' & allGear$MaxDepth_m >= 1000),])` in total; 15 stations where both day and night sampling took place) to 1000 m and four additional casts at each station to around 650 and 250 m for water collection purposes only for eDNA analysis. Four planned CTD casts (1 1000 m depth cast and 3 eDNA casts) were cancelled due to difficult weather conditions or all-stop to operations due to sewage issues. One opportunistic cast to collect water for methods comparison for eDNA analysis was conducted at station 14 after the last daytime operations finished. During all casts, profiles of temperature, conductivity, and dissolved oxygen were collected on redundant sensors, and profiles of fluorescence were collected by both an open WET Labs and pumped Seapoint fluorometer (Fig. 2-4).
+
+     4. ADCP and EK80 were turned on intermittently for the entirety of the project. EK80 collected data only during transits and data collection was stopped during station operations becuase the quality of the data is generally too poor to analyze due to ship noise. Initially the ADCP and speed logger were on continuously. On March 29 interference between the ADCP and the EK80 on all frequencies was identified. The interference could not be resolved, so starting 31 March, the ADCP and the ship's speed logger were secured during transit when EK80 data were collected and turned back on during station operations because the bridge needed them when gear was in the water.
+     
+     5. TSG data were collected at a roughly 5-second resolution throughout the survey. 
+
+B.  Conduct regular CTD-mounted fluorometer measurements and water collection from CTD rosette-mounted Niskin bottles in the shallow scattering layer (approximately 0-200m) at the center, edge, and outside oceanographic features for extracted chlorophyll and nutrient measurements, along with size fractionation of the phytoplankton to assess the influence of the physical dynamics on the biological productivity in and around oceanographic features.
+
+     1. A CTD-mounted Wetlabs ECO FLNTURTD fluorometer measured chlorophyll profiles to a depth of 1000 m during `r nrow(allGear[which(allGear$Gear == 'CTD' & allGear$MaxDepth_m >= 1000),])` CTD casts. Water samples were collected at 10 depths (surface, 20, 35, 50, 65, 80, 100, 125, 150, and 200 m) during these CTDs for analyses of bulk and size fractionated chlorophyll and chlorophyll-_a_ (at 20, 2, and 0.2 $\mu$m size fractions), and nutrient analysis (Table 1).
+     
+     2. Due to delayes in shipping of a new benchtop fluorometer, the chlorophyll filters were stored in a liquid nitrogen dry shipper for post-cruise analysis. Nutrient samples were stored in the scientific freezer for post cruise analysis. 
+
+C.  Conduct water collection from CTD rosette mounted Niskin bottles at up to 8 pre-determined depths per site in the shallow scattering layer (0-200m) and deep scattering layer (400-600m) to be filtered for environmental DNA (eDNA) metabarcoding to provide community composition of plankton, fish, squid, and mammals in and around oceanographic features. 
+
+\hangindent=0.75in \tabto{0.75in} 
+During day-time and night-time operations at each of the 15 stations, 2 CTD casts were conducted consecutively, collecting water for eDNA analysis, for a total of `r nrow(allGear[which(allGear$Gear == 'CTD' & allGear$MaxDepth_m < 1000),])` casts (Table 1). Each cast collected water from 3 depths for a total of 24 l of water each at 6 depths for each sampling cycle (day and night). The collection depths were determined by the depth of the deep and shallow acoustic scattering layer recorded by the EK80 active acoustics system with targets within and below the scattering layers.
+     
+D.  Monitor the biological backscatter using the Simrad EK80 echosounder system in an effort to assess the relative density, distribution, and composition of micronekton in and around oceanographic features and how that relates to physical dynamics along the project track. 
+
+     1. Bioacoustic data were collected intermittently during the cruise during transits only. On March 29 interference between the ADCP and the EK80 on all frequencies was identified. The interference could not be resolved by adjusting the trigger jigger, so starting 31 March, the ADCP and the ships speed logger were secured during transit when EK80 data were collected and turned back on during station operations when EK80 data collection was paused. Data were analyzed post-cruise.
+     
+     2. Acoustic data were used in real time during the cruise to determine sampling depths for eDNA operations as well as opportunistic Tucker trawls. 
+     
+E.  Deploy bongo nets with wire mounted SeaBird CTD in the shallow scattering layer (approximately 0–200m) to assess the influence of physical dynamics on the biomass, distribution, and composition of mesozooplankton and ichthyoplankton in and around oceanographic features.
+
+     1. A total of `r max(allGear[which(allGear$Gear == 'bongo'),'Tow'])` successful bongo tows were conducted at 16 stations using a 200-$\mu$m mesh net. To get real time depth, a FastCat CTD was attached to the conducting wire and used during deployments along with temperature depth recorders (Table 2). The TDRs provide depth and temperature along the deployment after the tow. However, the FastCat termination experienced a lot of wear being pulled through the block every time the winch was rotated (4× per sampling cycle) and had to be reterminated during every transit. On 30 March, Survey Tech ran out of parts for the termination and we decided to stop using the FastCat altogether. Fron then on, depth target was solely determined by ship speed, wire out, and wire angle. The depth of the tow was confirmed after the tow was completed using temperature-depth recorders (TDRs). Our protocol called for a net deployment rate of 50 m per minute, 300 m wire out, and to maintain a 45-degree wire angle during the tow haul back at 20 m per minute. The ship was consistently unable deploy the net at rates higher than 20 m per minute or slow the ship down to bare steerage to allow the net to sink further, resulting in our actual net depths being consistently shallower than the target 210 m depth. 
+     
+     2. Samples from the bongo nets were preserved for bulk and size-fractionated biomass. One net was size-fractioned into 200, 500, 1000, 2000, and 5000 $\mu$m fractions and stored in the ship's scientific freezer for post-cruise drying and weighing. The other net was split in half using a Folsom splitter with one half preserved in 95% ethanol and one in 10% formalin for post-cruise genetic analysis (of the ethanol preserved fraction) and identification and measurements using ZooSCAN (formalin preserved fraction). Fish larger than 1 cm found in the samples were removed and stored in the ship's scientific freezer for genetic work post-cruise. 
+     
+F.  Deploy towed equipment, including the 6-foot Isaacs-Kidd Midwater Trawl (IKMT) and 2-meter ring net, in the shallow scattering layer (approximately 0–50m) in an effort to locate areas with eggs and ichthyoplankton larvae.
+
+     1. For this effort, the 6 foot Isaaks-Kidd Modwater Trawl (IKMT) net with a 505-$\mu$m mesh net was yo-yo towed in the top 50 m of the water column at all 17 stations (Table 3). A total of `r max(allGear[which(allGear$Gear == 'IKMT'),'Tow'])` IKMT tows were successfully completed; 8 daytime tows and 5 nighttime tows. The net mesh size was not small enough to catch any eggs, but did capture larval fish. We focused on the top 50 m of the water column after conversations with Barb Muhling at SWFSC regarding her success in catching bluefin tuna larvae in the Gulf of Mexico at that depth and kept the tow protocol consistent with ongoing ichthyoplankton surveys taking place around the Hawaiian Islands. 
+     
+     2. Because the sampling went faster than expected, we were able to add a replicate tow at almost all stations. However, if we were making up time at any one station, one of the IKMT tows was cut. 
+     
+     3. After initial coarse sorting onboard, we found several tuna larvae in the trawl, but identification to species will had to be conducted post-cruise using DNA methods. These specimen are valuable in determining spawning locations of tunas in the Hawai‘i longline fishing grounds.
+     
+     4. On 30 March, at station 7, the IKMT frame got snagged on the lip of the ship by the cutout upon retreival. The paravane bent and the welds on one of the arms broke off. Engineering were called and immediately started working on fixing the arm. They were not able to straighten out the paravale itself, but they welded the arm back on so the IKMT was ready for deployment by the next sampling cycle; no sampling opportunity was lost.
+     
+     5. There were no 2-meter ring net tows
+     
+G.  Deploy a Cobb trawl (and possibly 10 m^2^ Tucker trawl and 10’ IKMT) in the shallow scattering layer (approximately 0–250 m) to assess size and composition of micronekton in and around oceanographic features and conduct stomach content analysis on select micronekton for use in size-based ecosystem models. 
+
+     1. The Cobb trawl was not operable at the time of sailing, so we replaced the Cobb operations with the a 10-meter Tucker Trawl. This was the largest net we had access to and the only gear capable of targeting micronekton successfully. While the Tucker performed successfully during the cruise operations, the catches were small compared to a typical Cobb trawl catch. The amount of water the 10-m Tucker trawl can filter is far less than the Cobb trawl. There was a gap in our size-based sampling strategy left by the lack of Cobb trawling; having an operational Cobb trawl is essential for studying micronekton, the forage of bigeye tuna. 
+     
+     2.  A total of `r max(allGear[which(allGear$Gear == 'Tucker'),'Tow'])` Tucker tows were successfully completed; `r nrow(allGear[which(allGear$Gear == 'Tucker' & allGear$Day.Night == 'day'),])` daytime tows and `r nrow(allGear[which(allGear$Gear == 'Tucker' & allGear$Day.Night == 'night'),])` nighttime tows at all 17 stations, including opportunistic sampling between stations (Table 4). 
+     
+     3. The Tucker trawl was used to collect genetic voucher specimens throughout the survey, and opportunistic Tucker trawls were conducted in addition to those conducted at each station. A total of 462 vouchers were collected during the survey.  
+     
+H.  Deploy surface neuston net from boom/outrigger during transits and for targeted stations in an effort to locate areas with fish eggs and larvae, as well as acquire data on floating debris and plastic.
+     
+\hangindent=0.6in \tabto{0.6in} 
+An underway neuston first tested during SE-22-04 was field tested again in order to streamline deployment and recovery. The net was towed from the outrigger on the port side. The net performed well during speeds up to ~7.5 knots but rode optimally at 6 knots. To further improve recovery of the net and to facilitate switching out cod ends without bringing the net onboard, a pully system attached to the outboard padeye on the gallows would be helpful.  Valuable information was gained from the field tests, and the net will be modified before our next cruise. 
+     
+I.  Conduct opportunistic dip net sampling during nighttime CTD operations to collect flying fish and squid specimens for archipelago-wide diet study.
+     
+\hangindent=0.75in \tabto{0.75in} 
+We did not conduct any opportunistic dip net sampling.
+
+\newpage
+
+**SCIENTIFIC PERSONNEL:**
+
+```{r, echo=FALSE, fig.pos='H'}
+library(knitr)
+s <- kbl(staff, booktabs=T, label=NA) %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"), font_size=10) %>% 
+  add_footnote(c('Pacific Islands Fisheries Science Center', 'National Marine Fisheries Service', 'University of Hawaii', 'Cooperative Institute for Marine and Atmospheric Research'), notation='number')
+
+asis_output(str_replace_all(s, c("PIFSC1"="PIFSC$^{1}$", "NMFS2"="NMFS$^{2}$", "UH3"="UH$^{3}$", "CIMAR4"="CIMAR$^{4}$")))
+```
+
+$\vspace{8pt}$
+
+\newpage
+
+**TABLES:**
+
+```{r, echo=FALSE, fig.pos='H', warning=FALSE}
+# Add superscript for footnotes
+CTDlog$Tow[17] <- paste0(20, 'b')
+# Add a column with what the ctd was for
+CTDlog$Utility <- ifelse(CTDlog$MaxDepth_m > 900, 'Nutrients, Chl', 'eDNA')
+#CTDlog$Utility <- linebreak(CTDlog$Utility)
+
+t1 <- CTDlog %>% 
+  dplyr::select(Tow, Station, Day.Night, DateTimeHST, Lon, Lat, MaxDepth_m, Utility) %>% 
+  mutate(Lon=abs(Lon)) %>% 
+  rename(Cast=Tow, `Time of day`=Day.Night, `Latitude (°N)`=Lat, `Longitude (°W)`=Lon, `Date Time (HST)`=DateTimeHST, `Depth (m)`=MaxDepth_m, `Water use`=Utility)  %>% 
+  kbl(booktabs=T, label='CTD operations', caption = 'CTD operations during SE-24-03.', longtable=T, escape=F, col.names = linebreak( c("Cast","Station","Time of day","Date and Time\n(HST)","Longitude\n(°W)","Latitude\n(°N)","Depth\n(m)","Water use"), align = "c")) %>%
+  kable_styling(latex_options = c("striped", "hold_position", 'repeat_header'), font_size=10) %>% 
+  footnote(alphabet=c('Cast 1-3 were failed casts while getting the CTD operational.', 'Bottle #1 did not fire'))
+
+asis_output(str_replace_all(t1, c("20b"="20$^{b}$")))
+```
+
+```{r}
+
+```
+
+\newpage
+
+
+```{r, echo=FALSE, fig.pos='H', warning=FALSE, fig.width=7}
+ikmt %>% 
+  rename() %>% 
+  dplyr::select(Tow, Station, Day.Night, DateTimeHST, lon, lat, MaxDepth_m) %>% 
+  rename(`Time of day`=Day.Night, `Latitude (°N)`=lat, `Longitude (°W)`=lon, `Date and Time (HST)`=DateTimeHST, `Max Depth (m)`=MaxDepth_m) %>% 
+  kbl(booktabs=T, label='IKMT tows', caption = 'Start time and locations for IKMT tows during SE-24-03', longtable = T, escape=F, col.names = linebreak(c('Tow', 'Station', 'Time of day', 'Date and Time\n(HST)', 'Longitude\n(°W)', 'Latitude\n(°N)', 'Max Depth\n(m)'), align='c')) %>%
+  kable_styling(latex_options = c("striped", "hold_position", 'repeat_header'), font_size=10)
+```
+
+```{r echo=FALSE, fig.pos='H', warning=FALSE}
+bongo %>%
+  dplyr::select(Tow, Station, Day.Night, DateTimeHST, lon, lat, MaxDepth_m) %>% 
+  rename(`Time of day`=Day.Night, `Latitude (°N)`=lat, `Longitude (°W)`=lon, `Date and Time (HST)`=DateTimeHST, `Max Depth (m)`=MaxDepth_m) %>% 
+  kbl(booktabs=T, label='Bongo tows', caption = 'Start time and locations for bongo tows during SE-24-03.', escape=F, col.names = linebreak(c('Tow', 'Station', 'Time of day', 'Date and Time\n(HST)', 'Longitude\n(°W)', 'Latitude\n(°N)', 'Max Depth\n(m)'), align='c')) %>%
+  kable_styling(latex_options = c("striped"), font_size=10)
+```
+
+
+```{r echo=FALSE, fig.pos='H', warning=FALSE}
+tucker  %>% 
+    dplyr::select(Tow, Station, Day.Night, DateTimeHST, lon, lat, MaxDepth_m) %>% 
+    rename(`Time of day`=Day.Night, `Latitude (°N)`=lon, `Longitude (°W)`=lat, `Date and Time (HST)`=DateTimeHST, `Max Depth (m)`=MaxDepth_m) %>% 
+  kbl(booktabs=T, label='Bongo tows', caption = 'Start time and locations for Tucker tows during SE-24-03.', escape=F, col.names = linebreak(c('Tow', 'Station', 'Time of day', 'Date and Time\n(HST)', 'Longitude\n(°W)', 'Latitude\n(°N)', 'Max Depth\n(m)'), align='c')) %>%
+  kable_styling(latex_options = c("striped"), font_size=10)
+```
+
+
+$\vspace{8pt}$
+
+\newpage
+
+**FIGURES:**
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+library(ggplot2)
+a <- list()
+for (i in seq_along(unique(ctdPts$Location))) {
+  # Turn rasters into data frames for plotting in ggplot and metR
+  # Choose date
+  idx <- c(6, 16, 23)[i]
+  loc <- c("Cyclonic 1", "Anti-Cyclonic", "Cyclonic 2")[i]
+  vels <- brick(uAll[[idx]], vAll[[idx]])
+  names(vels) <- c('u', 'v')
+  test <- rasterToPoints(vels)
+  test <- data.frame(cbind(test, vel=sqrt(test[,3]^2 + test[,4]^2)))
+  sla <- data.frame(rasterToPoints(slaAll[[idx]]))
+  names(sla)[3] <- 'SLA'
+  dat <- left_join(test, sla)
+  
+  # Identify station locations
+  stn <- track %>% filter(Location == loc, Trigger.Name == 'CTD Deploy')
+  
+  a[[i]] <- ggplot() + 
+    geom_contour_fill(data=dat, aes(x, y, z=SLA), na.fill =T, bins=40) + 
+    geom_vector(data=dat, aes(x, y, dx=u, dy=v), arrow.angle=30, arrow.type='open', arrow.length = 0.3, pivot = 0, preserve.dir = T, direction = 'ccw', alpha=0.6) + 
+    borders(database = 'world', xlim=c(-162, -156), ylim=c(14,24), fill='darkgray') +
+    coord_sf(xlim=c(-162, -156), ylim=c(15,23)) +
+    scale_fill_divergent(name='SLA (m)') + 
+    guides(fill=guide_colorbar(barheight = 6)) +
+    theme_bw() + 
+    theme(legend.position = "right",
+          legend.key.height = unit(1.2, "cm"), 
+          legend.background = element_blank(),
+          axis.text = element_text(size = 12, colour = 1)) +
+    scale_mag(max = 1.5, name = "Velocity \n(m/s)", max_size = 0.9) +
+    labs(x = "", y = "") +#, title = 'SE2403 cyclonic eddy 1', subtitle = paste('Stations 2-5; Background during', getZ(slaAll[[idx]]))) +
+    geom_path(data=stn, aes(Longitude,Latitude, group=Station.Number), lwd=1)
+}
+
+```
+
+<!--
+Test figure using levelplot instead of ggplot
+-->
+```{r include=FALSE}
+
+library(rasterVis)
+library(latticeExtra)
+library(rnaturalearth)
+library(RColorBrewer)
+#library(viridis)
+
+# Set map theme
+mapThemeSSH <- rasterTheme(region=rev(brewer.pal(11, 'RdBu')))
+mycol <- colorRampPalette(brewer.pal(9,'YlGn'))
+#mycol <- colorRampPalette(viridis(17, option = 'turbo'))
+
+stnBreak <- allGear %>% 
+  dplyr::select(Lon, Lat, Station) %>% 
+  mutate(Lon=Lon*-1) %>% 
+  group_split(Station) 
+
+stnBreakdf <- stnBreak %>% 
+  purrr::map_dfr(~ add_row(.x, .after = Inf)) %>% 
+  data.frame()
+
+idx <- c(1,12,33,50,71,82,97,112,127,135,150,165,179,194,223,225,239)
+idx_offset <- c(rep(0.2,3), -0.25, -0.12, rep(0.2,9),-0.2,0.2,-0.2)
+
+# get data ready
+testRas <-raster(extent(slaAll), res=0.005, crs=crs(slaAll)) # blank raster to interpolate to
+slaRas <- raster::resample(slaAll[[15]], testRas)
+velsRas <- brick(uAll[[15]], vAll[[15]])
+velsint <- raster::resample(velsRas, testRas)
+seqval <- max(abs(c(minValue(slaRas), maxValue(slaRas))))
+
+# make land polygon
+world <- ne_countries(scale = "large", returnclass='sv')
+#land <- sf::st_crop(world, xmin=-162.75, xmax=-155.5, ymin=14.25, ymax=23.75)
+land <- crop(world, slaRas)
+landsp <- as(land, 'Spatial')
+
+# Make plot
+velsPlot <- vectorplot(velsint*10, isField='dXY', region=slaRas, par.settings=mapThemeSSH, maring=FALSE, narrows=2000, at=seq(-seqval, seqval, by=((2*seqval)/50)), colorkey=list(title=list('Sea Level \nAnomaly (m)', cex=0.8), space='right', title.control=list(side='bottom')), xlab=NULL, ylab=NULL, alpha=0.6) +
+  layer(sp.polygons(landsp, fill='gray50', col='gray30')) +
+  layer(panel.lines(stnBreakdf[,1:2], col='black', lwd=2.2)) +
+  # layer(panel.lines(stnBreak[[1]], col=mycol(17)[1], lwd=2)) +
+  # layer(panel.lines(stnBreak[[2]], col=mycol(17)[2], lwd=2)) +
+  # layer(panel.lines(stnBreak[[3]], col=mycol(17)[3], lwd=2)) +
+  # layer(panel.lines(stnBreak[[4]], col=mycol(17)[4], lwd=2)) +
+  # layer(panel.lines(stnBreak[[5]], col=mycol(17)[5], lwd=2)) +
+  # layer(panel.lines(stnBreak[[6]], col=mycol(17)[6], lwd=2)) +
+  # layer(panel.lines(stnBreak[[7]], col=mycol(17)[7], lwd=2)) +
+  # layer(panel.lines(stnBreak[[8]], col=mycol(17)[8], lwd=2)) +
+  # layer(panel.lines(stnBreak[[9]], col=mycol(17)[9], lwd=2)) +
+  # layer(panel.lines(stnBreak[[10]], col=mycol(17)[10], lwd=2)) +
+  # layer(panel.lines(stnBreak[[11]], col=mycol(17)[11], lwd=2)) +
+  # layer(panel.lines(stnBreak[[12]], col=mycol(17)[12], lwd=2)) +
+  # layer(panel.lines(stnBreak[[13]], col=mycol(17)[13], lwd=2)) +
+  # layer(panel.lines(stnBreak[[14]], col=mycol(17)[14], lwd=2)) +
+  # layer(panel.lines(stnBreak[[15]], col=mycol(17)[15], lwd=2)) +
+  # layer(panel.lines(stnBreak[[16]], col=mycol(17)[16], lwd=2)) +
+  # layer(panel.lines(stnBreak[[17]], col=mycol(17)[17], lwd=2)) +
+  layer(panel.text(stnBreakdf[idx,1]-idx_offset, stnBreakdf[idx,2], labels=stnBreakdf[idx,3], cex=1))
+
+```
+
+```{r echo=FALSE, fig.height=10, fig.width=6, message=FALSE, warning=FALSE, fig.cap='SE2403 Station Locations. Color shading shows sea level anomaly with geostrophic currents plotted as arrows for 2 April 2024.', fig.alt='Map showing the Hawaiian archipelago and ocean to the south. Color shading shows sea level anomalies with arrows dislplaying geostrophic currents. Black lines are station locations for SE2403 and are numbered for reference.'}
+velsPlot
+```
+
+
+<!--
+Make figure
+-->
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(ggplot2)
+# Names for stations
+stnLabs <- c('Edge', 'Center', 'Edge', 'Outside', 'Outside', 'Center', 'Edge', 'Outside', 'Center', 'Edge', 'Outside', 'Outside', 'Edge', 'Center', 'Outside')
+names(stnLabs) <- c(2:16)
+loc <- c("Cyclonic 1", "Anti-Cyclonic", "Cyclonic 2")
+asprat <- c(5, 6 ,5)
+ctd$Station_f <- factor(ctd$Station, levels=c(2,3,4,5,12,6,11,7,10,8,9,13,14,15,16))
+
+b <- list()
+c <- list()
+d <- list()
+
+ctd[which(ctd$Station == 11 & ctd$Day.Night == 'N'), 'fluorescence'] <- NA
+ctd[which(ctd$Station == 2), 'salinity'] <- NA
+
+for (j in seq_along(unique(ctdPts$Location))) {
+  # Subset the MLd dataset
+  datPlot <- datMLD %>% filter(Location == loc[j])
+  datPlot$Station_f <- factor(datPlot$Station, levels=c(2,3,4,5,12,6,11,7,10,8,9,13,14,15,16))
+  stnLabel <- stnLabs[unique(ctdPts[which(ctdPts$Location == loc[j]),'Station'])-1]
+  
+  # Make plot
+  b[[j]] <- ctd %>% filter(Location == loc[j]) %>% 
+    ggplot() +
+    geom_path(aes(temperature, depth, group=Cast, color=Day.Night), linewidth=1, alpha=0.8) +
+    geom_hline(data=datPlot, aes(yintercept = D_MLD, color=Day.Night), linetype='dashed') +
+    scale_y_reverse() +
+    scale_color_manual(values=c('#008acc', '#143496'), guide=NULL) +
+    facet_grid(. ~ Station_f, labeller=labeller(Station_f = ~ paste('Stn:',.x, '\n', stnLabel))) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(), strip.background =element_rect(fill='white'), aspect.ratio = asprat[j], axis.text = element_text(angle = 90, vjust = 0.5, hjust=1, size=7), axis.text.y=element_text(hjust=0.5, angle=90), strip.text = element_text(size=7)) +
+    xlab('Temperature (°C)') + ylab('Depth (m)')
+  
+  c[[j]] <- ctd %>% filter(Location == loc[j]) %>% 
+    ggplot() +
+    geom_path(aes(salinity, depth, group=Cast, color=Day.Night), linewidth=1, alpha=0.8) +
+    scale_y_reverse() +
+    scale_color_manual(values=c('#cb181d', '#67000d'), guide=NULL) +
+    facet_grid(. ~ Station_f, labeller=labeller(Station_f = ~ paste('Stn:',.x, '\n', stnLabel))) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(), strip.background =element_rect(fill='white'), aspect.ratio = asprat[j], axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=7), axis.text.y=element_text(hjust=0.5, angle=90), strip.text = element_text(size=7)) +
+    xlab('Salinity (ppt)') + ylab('Depth (m)')
+  
+  d[[j]] <- ctd %>% filter(Location == loc[j], Cast != 4) %>%
+    ggplot() +
+    geom_path(aes(fluorescence, depth, group=Cast, color=Day.Night), linewidth=1, alpha=0.8) +
+    scale_y_reverse() +
+    scale_color_manual(values=c('#238b45', '#00441b'), guide=NULL) +
+    facet_grid(. ~ Station_f, labeller=labeller(Station_f = ~ paste('Stn:',.x, '\n', stnLabel))) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(), strip.background =element_rect(fill='white'), aspect.ratio = asprat[j], axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=7), axis.text.y=element_text(hjust=0.5, angle=90), strip.text = element_text(size=7)) +
+    xlab(bquote('Chlorophyll (' ~mg/m^3~ ')' )) + ylab('Depth (m)')
+  
+  # e <- ctd %>% filter(Location == loc[j], Station !=2) %>%
+  #     ggplot() +
+  #     geom_point(aes(salinity, temperature, color=Day.Night)) +
+  #     scale_color_manual(values=c('#cb181d', '#67000d'), guide=NULL) +
+  #     facet_grid(. ~ Station_f, labeller=labeller(Station_f=stnLabs), scales = 'free_x') +
+  #     theme_bw() +
+  #     theme(panel.grid = element_blank(), strip.background =element_rect(fill='white')) +
+  #     xlab('Salinity') + ylab('Temperature (m)')
+}
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+ctdSub <- ctd %>% filter(Location == loc[2])
+datPlot <- datMLD %>% filter(Location == loc[2])
+stnLabel <- stnLabs[unique(ctdPts[which(ctdPts$Location == loc[2]),'Station'])-1]
+
+ctdSub$Station_f <- factor(ctdSub$Station, levels=c(2,3,4,5,12,6,11,7,10,8,9,13,14,15,16))
+datPlot$Station_f <- factor(datPlot$Station, levels=c(2,3,4,5,12,6,11,7,10,8,9,13,14,15,16))
+
+e <- ctdSub %>% 
+    ggplot() +
+    geom_path(aes(temperature, depth, group=Cast, color=Day.Night), linewidth=1, alpha=0.8) +
+    geom_hline(data=datPlot, aes(yintercept = D_MLD, color=Day.Night), linetype='dashed') +
+    scale_y_reverse() +
+    scale_color_manual(values=c('#008acc', '#143496'), guide=NULL) +
+    facet_grid(. ~ Station_f, labeller=labeller(Station_f = ~ paste('Station: ',.x, '\n', stnLabel))) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(), strip.background =element_rect(fill='white')) +
+    xlab('Temperature (°C)') + ylab('Depth (m)')
+
+f <- ctdSub %>% 
+    ggplot() +
+    geom_path(aes(salinity, depth, group=Cast, color=Day.Night), linewidth=1, alpha=0.8) +
+    scale_y_reverse() +
+    scale_color_manual(values=c('#cb181d', '#67000d'), guide=NULL) +
+    facet_grid(. ~ Station_f, labeller=labeller(Station_f = ~ paste('Station: ',.x, '\n', stnLabel))) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(), strip.background =element_rect(fill='white')) +
+    xlab('Salinity (ppt)') + ylab('Depth (m)')
+
+g <- ctdSub %>% filter(Cast != 58) %>% 
+    ggplot() +
+    geom_path(aes(fluorescence, depth, group=Cast, color=Day.Night), linewidth=1, alpha=0.8) +
+    scale_y_reverse() +
+    scale_color_manual(values=c('#238b45', '#00441b'), guide=NULL) +
+    facet_grid(. ~ Station_f, labeller=labeller(Station_f = ~ paste('Station: ',.x, '\n', stnLabel))) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(), strip.background =element_rect(fill='white')) +
+    xlab('Chlorophyll (mg/m^3)') + ylab('Depth (m)')
+
+```
+
+
+
+<!-- ## Cyclonic Eddy 1 -->
+
+```{r echo=FALSE, fig.height=8, fig.width=6, message=FALSE, warning=FALSE}
+#detach("package:metR", unload = TRUE)
+detach("package:ggplot2", unload = TRUE)
+# get data ready
+cyc1 <- raster(xmn=-160.5, xmx=-157.75, ymn=19, ymx=22)
+testRas1 <- crop(testRas, cyc1)
+slaRas <- raster::resample(slaAll[[6]], testRas1)
+velsRas <- brick(uAll[[6]], vAll[[6]])
+velsint <- raster::resample(velsRas, testRas1)
+seqval <- max(abs(c(minValue(slaRas), maxValue(slaRas))))
+
+# Station locations
+stnBreak <- ctdPts %>% 
+  filter(Station %in% 2:5)
+
+# Make plot
+# Should these be paired sattelite and depth profile plots? 
+velsPlotCyc1 <- vectorplot(velsint*5, isField='dXY', region=slaRas, par.settings=mapThemeSSH, maring=FALSE, narrows=1000, at=seq(-seqval, seqval, by=((2*seqval)/50)), colorkey=list(title=list('Sea Level Anomaly (m)', cex=0.75), space='top', title.control=list(side='top'), width=0.8), scales=list(y=list(rot=90)), xlab=NULL, ylab=NULL, alpha=0.6) +
+  layer(sp.polygons(landsp, fill='gray50', col='gray30')) +
+  layer(panel.points(stnBreak[which(stnBreak$Day.Night == 'D'),2:3], col='white', fill='black', cex=1.2, pch=21)) +
+  layer(panel.points(stnBreak[which(stnBreak$Day.Night == 'N'),2:3], col='white', fill='black', cex=1, pch=24)) +
+  layer(panel.text(stnBreak[,2]-0.15, stnBreak[,3], labels=stnBreak[,6], cex=0.8))
+
+
+```
+
+```{r echo=FALSE, fig.height=8.5, fig.width=6.5, message=FALSE, warning=FALSE, fig.cap='Cyclonic eddy 1 station locations and CTD data. A is a map of sampling locations and shading is sea level anomaly with geostrophic currents plotted as arrows for 24 March 2024. CTD depth profiles for (B) temperature, (C) salinity, and (D) chlorophyll. Light lines are daytime sampling and dark lines are night time sampling. Dashed horizontal lines mark the bottom of the mixed layer.', fig.alt='Map showing the Hawaiian archipelago and ocean to the south. Color shading shows sea level anomalies with arrows dislplaying geostrophic currents. Circles are daytime CTD locations and triangles are nighttime CTD locations.'}
+# Put the figures together
+#png('~/Desktop/SE2403_Cycl1_CTD.png', width=6, height=7, units='in', res=300)
+stnLabel <- stnLabs[unique(ctdPts[which(ctdPts$Location == loc[1]),'Station'])-1]
+grid.arrange(velsPlotCyc1, b[[1]], c[[1]], d[[1]], nrow=2)
+#dev.off()
+```
+
+
+
+<!--## Anti-cyclonic eddy-->
+
+```{r fig.height=8.5, fig.width=6.5, message=FALSE, warning=FALSE, include=FALSE}
+anti <- raster(xmn=-162, xmx=-158.5, ymn=15.5, ymx=20.5)
+testRas2 <- crop(testRas, anti)
+slaRas <- raster::resample(slaAll[[16]], testRas2)
+velsRas <- brick(uAll[[16]], vAll[[16]])
+velsint <- raster::resample(velsRas, testRas2)
+seqval <- max(abs(c(minValue(slaRas), maxValue(slaRas))))
+
+# Station locations
+stnBreak <- ctdPts %>% 
+  filter(Station %in% 6:12)
+
+# Make plot
+# Should these be paired sattelite and depth profile plots? 
+velsPlotAnti <- vectorplot(velsint*5, isField='dXY', region=slaRas, par.settings=mapThemeSSH, maring=FALSE, narrows=1000, at=seq(-seqval, seqval, by=((2*seqval)/50)), colorkey=list(title=list('Sea Level\nAnomaly (m)', cex=0.75), space='right', title.control=list(side='bottom'), width=0.8), scales=list(y=list(rot=90)), xlab=NULL, ylab=NULL, alpha=0.6) +
+  layer(sp.polygons(landsp, fill='gray50', col='gray30')) +
+  layer(panel.points(stnBreak[which(stnBreak$Day.Night == 'D'),2:3], col='white', fill='black', cex=1.2, pch=21)) +
+  layer(panel.points(stnBreak[which(stnBreak$Day.Night == 'N'),2:3], col='white', fill='black', cex=1, pch=24)) +
+  layer(panel.text(stnBreak[which(stnBreak$Day.Night == 'N'),2]+0.3, stnBreak[which(stnBreak$Day.Night == 'N'),3], labels=stnBreak[which(stnBreak$Day.Night == 'N'),6], cex=0.8))
+
+```
+
+
+```{r echo=FALSE, fig.height=8.5, fig.width=6.5, message=FALSE, warning=FALSE, fig.cap='Anticyclonic eddy station locations and CTD data. A is a map of sampling locations and shading is sea level anomaly with geostrophic currents plotted as arrows for 3 April 2024. CTD depth profiles for (B) temperature, (C) salinity, and (D) chlorophyll. Light lines are daytime sampling and dark lines are night time sampling. Dashed horizontal lines mark the bottom of the mixed layer.', fig.alt='Map showing the Hawaiian archipelago and ocean to the south. Color shading shows sea level anomalies with arrows dislplaying geostrophic currents. Circles are daytime CTD locations and triangles are nighttime CTD locations.'}
+
+#png('~/Desktop/SE2403_Anti_CTD.png', width=6, height=7, units='in', res=300)
+stnLabel <- stnLabs[unique(ctdPts[which(ctdPts$Location == loc[2]),'Station'])-1]
+stnLabel<- stnLabel[c(12,6,11,7,10,8,9)-5]
+grid.arrange(velsPlotAnti, b[[2]], c[[2]], d[[2]], nrow=2)
+#dev.off()
+
+```
+
+
+
+<!--## Cyclonic Eddy 2-->
+
+```{r echo=FALSE, fig.height=8.5, fig.width=6.5, message=FALSE, warning=FALSE}
+cyc2 <- raster(xmn=-160.5, xmx=-157.75, ymn=19, ymx=22)
+testRas3 <- crop(testRas, cyc2)
+slaRas <- raster::resample(slaAll[[23]], testRas3)
+velsRas <- brick(uAll[[23]], vAll[[23]])
+velsint <- raster::resample(velsRas, testRas3)
+seqval <- max(abs(c(minValue(slaRas), maxValue(slaRas))))
+
+# Station locations
+stnBreak <- ctdPts %>% 
+  filter(Station %in% 13:16)
+
+# Make plot
+# Should these be paired sattelite and depth profile plots? 
+velsPlotCyc2 <- vectorplot(velsint*5, isField='dXY', region=slaRas, par.settings=mapThemeSSH, maring=FALSE, narrows=1000, at=seq(-seqval, seqval, by=((2*seqval)/50)), colorkey=list(title=list('Sea Level Anomaly (m)', cex=0.75), space='top', title.control=list(side='top'), width=0.8), scales=list(y=list(rot=90)), xlab=NULL, ylab=NULL, alpha=0.6) +
+  layer(sp.polygons(landsp, fill='gray50', col='gray30')) +
+  layer(panel.points(stnBreak[which(stnBreak$Day.Night == 'D'),2:3], col='white', fill='black', cex=1.2, pch=21)) +
+  layer(panel.points(stnBreak[which(stnBreak$Day.Night == 'N'),2:3], col='white', fill='black', cex=1, pch=24)) +
+  layer(panel.text(stnBreak[which(stnBreak$Day.Night == 'N'),2]+0.3, stnBreak[which(stnBreak$Day.Night == 'N'),3], labels=stnBreak[which(stnBreak$Day.Night == 'N'),6], cex=0.8))
+
+```
+
+```{r echo=FALSE, fig.height=8.5, fig.width=6.5, message=FALSE, warning=FALSE, fig.cap='Cyclonic eddy 2 station locations and CTD data. A is a map of sampling locations and shading is sea level anomaly with geostrophic currents plotted as arrows for 10 April 2024. CTD depth profiles for (B) temperature, (C) salinity, and (D) chlorophyll. Light lines are daytime sampling and dark lines are night time sampling. Dashed horizontal lines mark the bottom of the mixed layer.', fig.alt='Map showing the Hawaiian archipelago and ocean to the south. Color shading shows sea level anomalies with arrows dislplaying geostrophic currents. Circles are daytime CTD locations and triangles are nighttime CTD locations.'}
+# Put the figures together
+#png('~/Desktop/SE2403_Cycl2_CTD.png', width=6, height=7, units='in', res=300)
+stnLabel <- stnLabs[unique(ctdPts[which(ctdPts$Location == loc[3]),'Station'])-1]
+grid.arrange(velsPlotCyc2, b[[3]], c[[3]], d[[3]], nrow=2)
+#dev.off()
+```
+
+
+
+\newpage
+` `  
+` `  
+` `  
+Submitted by: ___________________________________________  
+\tabto{1in} Johanna L. K. Wren, Ph.D.  
+\tabto{1in} Chief Scientist  
+` `  
+` `  
+` `  
+` `  
+` `  
+` `  
+Approved by: ___________________________________________
+\tabto{1in} Charles Littnan, Ph.D.  
+\tabto{1in} Science and Research Director  
+\tabto{1in} Pacific Islands Fisheries Science Center

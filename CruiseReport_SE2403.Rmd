@@ -1,0 +1,95 @@
+---
+title: '**PROJECT REPORT**'
+header-includes:
+- \usepackage{tabto}
+- \usepackage{pdflscape}
+- \usepackage{titling}
+- \usepackage{graphicx}
+- \usepackage{fancyhdr}
+- \newcommand{\blandscape}{\begin{landscape}}
+- \newcommand{\elandscape}{\end{landscape}}
+- \usepackage[T1]{fontenc}
+- \usepackage[utf8]{inputenc}
+- \usepackage{titling}
+- "\\setlength{\\droptitle}{-1in}"
+- \pretitle{\begin{center}
+- \includegraphics[width=4.5in]{PIFSCletterhead.png}\LARGE\\}
+mainfont: Times New Roman
+output:
+  pdf_document:
+    toc: no
+    df_print: paged
+  html_document:
+    toc: no
+    df_print: paged
+fontsize: 12pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '~/Documents/Cruises/SE2403_Features/')
+```
+
+```{r message=FALSE, include=FALSE}
+# Clear workspace
+rm(list=ls())
+
+# Set working directory
+mainDir <- '~/Documents/Cruises/SE2403_Features/'
+```
+
+**VESSEL:** \hangindent=1.5in \tabto{1.5in} 
+NOAA Ship *Oscar Elton Sette*, Project SE-24-03
+
+**PROJECT**  
+**PERIOD:** \tabto{1.5in} 
+March 18 -- April 14, 2024
+
+
+**AREA OF**
+$\vspace{-6pt}$
+
+**OPERATION:**
+\hangindent=1.5in \tabto{1.5in} 
+Operations were conducted in the waters to the south of the Hawaiian islands from Pearl Harbor to 16.3°N, 160.05°W (Fig. 1).
+
+**TYPE OF**
+$\vspace{-6pt}$
+
+**OPERATION:** 
+\hangindent=1.5in \tabto{1.5in} 
+Conductivity-temperature-depth (CTD) casts to 1000 m depth were conducted outside, at the edge, and inside an anticyclonic and a cyclonic open ocean eddy to the south of the Hawaiian archipelago, near 21°N, 159.2°W and 18°N, 159.5°W for the cyclonic and anticyclonic eddy respectively. Replicated 6 foot Isaaks-Kidd Midwater Trawl (IKMT) yo-yo tow down in the top 50 m were conducted at 0830 and 2030 daily at 15 stations, an oblique bongo tow down to ~200 m was conducted at 1100 and 2300 daily at 15 stations, and an oblique Tucker Trawl tow down to ~ 550 m was conducted at 1230 and 0030 daily at 17 stations. Finally, two additional CTDs were conducted at 1500 and 0300 daily to collect water for eDNA analysis. At Additionally, opportunistic Tucker, bongo, and IKMT tows were conducted when time allowed. Acoustic backscatter was collected during transit times between stations and the ADCP was collecting data while we were on station.
+
+\setlength{\leftskip}{0in}
+
+
+**ITINERARY:**
+
+
+```{r echo=FALSE}
+library(knitr)
+library(kableExtra)
+
+dt_lb <- data.frame( Item = c("Hello World", "This is a cat"), Value = c(10, 100) )
+dt_lb$Item = linebreak(dt_lb$Item)
+dt_lb %>% 
+  kbl(booktabs = T, escape = F, col.names = linebreak(c("Date Time\n(HST)", "Longitude\n(°W)"), align = "c"))
+
+
+testName <- c("Cast","Station","Time of day","Date and Time\n(HST)","Longitude\n(°W)","Latitude\n(°N)","Depth\n(m)","Water use")
+
+test <- read.csv('~/Desktop/testCTDdat.csv')
+names(test) <- c("Cast","Station","Time of day","Date & Time (HST)","Longitude (°W)","Latitude (°N)","Depth (m)","Water use")
+
+test %>%
+ kbl(booktabs=T, label='CTD operations', caption = 'CTD operations during SE-24-03.', longtable=T, escape=F, col.names = linebreak( c("Cast","Station","Time of day","Date and Time\n(HST)","Longitude\n(°W)","Latitude\n(°N)","Depth\n(m)","Water use"), align = "c")) %>%
+  kable_styling(latex_options = c("striped", "hold_position", 'repeat_header'), font_size=10) %>% 
+  footnote(alphabet=c('Cast 1-3 were failed casts while getting the CTD operational, the data from those casts are not part of the mission.', 'Bottle #1 did not fire'))
+
+```
+
+
+```{r}
+tdrDat <- read_excel('TowedGear/SE2403_Tucker_trawl_data.xlsx', sheet = 2)
+```
+

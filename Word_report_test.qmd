@@ -1,0 +1,107 @@
+---
+title: "PROJECT REPORT"
+format: docx
+editor: visual
+---
+
+```{r, include=FALSE}
+library(knitr)
+library(readxl)
+staff <- data.frame(read_xlsx('SE2403 Science Party.xlsx', sheet = 1))
+```
+
+**VESSEL:** NOAA Ship *Oscar Elton Sette*, Project SE-24-03
+
+**PROJECT PERIOD:** March 18 -- April 14, 2024
+
+**AREA OF OPERATION:** Operations were conducted in the waters to the south of the Hawaiian islands from Pearl Harbor to 16.3°N, 160.05°W (Fig. 1).
+
+**TYPE OF OPERATION:** Conductivity-temperature-depth (CTD) casts to 1000 m depth were conducted outside, at the edge, and inside an anticyclonic and a cyclonic open ocean eddy to the south of the Hawaiian archipelago, near 21°N, 159.2°W and 18°N, 159.5°W for the cyclonic and anticyclonic eddy respectively. Replicated 6 foot Isaaks-Kidd Midwater Trawl (IKMT) yo-yo tow down in the top 50 m were conducted at 0830 and 2030 daily at 15 stations, an oblique bongo tow down to \~200 m was conducted at 1100 and 2300 daily at 15 stations, and an oblique Tucker Trawl tow down to \~ 550 m was conducted at 1230 and 0030 daily at 17 stations. Finally, two additional CTDs were conducted at 1500 and 0300 daily to collect water for eDNA analysis. At Additionally, opportunistic Tucker, bongo, and IKMT tows were conducted when time allowed. Acoustic backscatter was collected during transit times between stations and the ADCP was collecting data while we were on station.
+
+**ITINERARY:**
+
+18 March 0900 Start of project (all times in HST). Embarked `r staff$Name[-12]` and `r staff$Name[12]`. Proceeded to first station in the center of a cyclonic eddy to the southwest of Oahu. Begin active acoustics (EK80) data collection. EK80 data will be collected during all transits but secured during station operations.
+
+April 14 0900 Returned to Pearl Harbor. Ended active acoustics data collection. Disembark `r staff$Name[-12]` and `r staff$Name[12]`.
+
+**MISSIONS AND RESULTS:**
+
+A.  Conduct routine conductivity-temperature-depth (CTD) casts to a maximum 1000 m, continuous acoustic Doppler current profiler (ADCP) and thermosalinograph (TSG) measurements along the length of the project track to describe the physical environment in the ocean in the center, edge, and outside of oceanographic features such as eddies and fronts.
+
+    1.  The project visited two eddies: one cyclonic and one anticyclonic, over 17 stations where each sampling cycle spanned over a 22 h period (Fig. 1). Each eddy was sampled twice, and stations were located near the center, edge, and outside of each eddy. Two additional stations either without a functioning CTD (station 1) or for opportunistic sampling (station 17) were sampled as well. Station locations were determined daily using near real time remotely sensed sea surface heigh anomaly data with derrived currents from Windy (windy.com; which uses Copernicus data) and NOAA's RADSs Sea Level Anomaly data (Dataset ID: noaacwBLENDEDsshDaily) provided through CoastWatch ShipWatch Service.
+
+    2.  During the first CTD cast of the cruise on 19 March the ship lost all communication ability with the CTD. The problem was resolved on 22 March, five days into the survey. Because the CTD is an essential piece of equipment, only opportunistic sampling was possible during times when the CTD was not functional, and planned station sampling could only start once the CTD was working. Once fixed, the CTD worked consistently for the remainder of the survey.
+
+    3.  A total of ?? fully successful CTD casts were conducted (Table 1); 2 casts at each station (??) in total; 15 stations where both day and night sampling took place) to 1000 m and four additional casts at each stations to around 650 and 250 m for water collection purposes only for eDNA analysis. Four planned CTD casts (1 1000 m depth cast and 3 eDNA casts) were cancelled due to difficult weather conditions or all-stop to operations due to sewage issues. One opportunistic cast was conducted at station 14 after the last daytime operations finished to collect water for methods comparison for eDNA methodology. During all casts, profiles of temperature, conductivity, and dissolved oxygen were collected on redundant sensors, and profiles of fluorescence were collected by both an open WET Labs and pumped Seapoint fluorometer (Fig. 2-4).
+
+    4.  ADCP and EK80 were turned on intermittently for the entirety of the project. EK80 was collecting data only during transits and data collection was turned off during station operations becuase the quality of the data is generally too poor to analyze due to ship noise. Initially the ADCP and speed logger were on continuously. On March 29 interference between the ADCP and the EK80 on all frequencies was identified. The interference could not be resolved, so starting 31 March, the ADCP and the ships speed logger were secured during transit when EK80 data was collected and turned back on during station operations because the bridge needed them when gear is in the water.
+
+    5.  TSG data were collected at a roughly 5-sec resolution throughout the survey.
+
+B.  Conduct regular CTD-mounted fluorometer measurements and water collection from CTD rosette mounted Niskin bottles in the shallow scattering layer (approximately 0-200m) at the center, edge, and outside oceanographic features for extracted chlorophyll and nutrient measurements, along with size fractionation of the phytoplankton to assess the influence of the physical dynamics on the biological productivity in and around oceanographic features.
+
+    1.  A CTD-mounted Wetlabs ECO FLNTURTD fluorometer measured chlorophyll profiles to a depth of 1000 m during ?? CTD casts. Water samples were collected at 10 depths (surface, 20, 35, 50, 65, 80, 100, 125, 150, and 200 m) during these CTDs for analysis of bulk and size fractionated chlorophyll and chlorophyll-*a* (at 20, 2, and 0.2 $\mu$m size fractions), and nutrient analysis (Table 1).
+
+    2.  Due to delayes in shipping of a new benchtop fluorometer, the chlorophyll filters were stored in a liquid nitrogen dry shipper for post-cruise analysis. Nutrient samples were stored in the scientific freezer for post cruise analysis.
+
+{{< pagebreak >}}
+
+**SCIENTIFIC PERSONNEL:**
+
+```{r, echo=FALSE, fig.pos='H'}
+# library(knitr)
+# s <- kbl(staff, booktabs=T, label=NA) %>%
+#   kable_styling(latex_options = c("striped", "HOLD_position"), font_size=10) %>% 
+#   add_footnote(c('Pacific Islands Fisheries Science Center', 'National Marine Fisheries Service', 'University of Hawaii', 'Cooperative Institute for Marine and Atmospheric Research'), notation='number')
+# 
+# asis_output(str_replace_all(s, c("PIFSC1"="PIFSC$^{1}$", "NMFS2"="NMFS$^{2}$", "UH3"="UH$^{3}$", "CIMAR4"="CIMAR$^{4}$")))
+```
+
+{{< pagebreak >}}
+
+**TABLES:**
+
+```{r, echo=FALSE, fig.pos='H', warning=FALSE}
+# # Add superscript for footnotes
+# CTDlog$Tow[17] <- paste0(20, 'b')
+# # Add a column with what the ctd was for
+# CTDlog$Utility <- ifelse(CTDlog$MaxDepth_m > 900, 'Nutrients, Chl', 'eDNA')
+# #CTDlog$Utility <- linebreak(CTDlog$Utility)
+# 
+# t1 <- CTDlog %>% 
+#   dplyr::select(Tow, Station, Day.Night, DateTimeHST, Lon, Lat, MaxDepth_m, Utility) %>% 
+#   mutate(Lon=abs(Lon)) %>% 
+#   rename(Cast=Tow, `Time of day`=Day.Night, `Latitude (°N)`=Lat, `Longitude (°W)`=Lon, `Date Time (HST)`=DateTimeHST, `Depth (m)`=MaxDepth_m, `Water use`=Utility)  %>% 
+#   kbl(booktabs=T, label='CTD operations', caption = 'CTD operations during SE-24-03.', longtable=T, escape=F, col.names = linebreak( c("Cast","Station","Time of day","Date and Time\n(HST)","Longitude\n(°W)","Latitude\n(°N)","Depth\n(m)","Water use"), align = "c")) %>%
+#   kable_styling(latex_options = c("striped", "hold_position", 'repeat_header'), font_size=10) %>% 
+#   footnote(alphabet=c('Cast 1-3 were failed casts while getting the CTD operational.', 'Bottle #1 did not fire'))
+# 
+# asis_output(str_replace_all(t1, c("20b"="20$^{b}$")))
+```
+
+{{< pagebreak >}}
+
+**FIGURES:**
+
+![SE2403 Survey locations. Background color shows the Sea Surface Anomaly on 7 April 2024.](images/SE2403_Survey_locations.png){fig-alt="Map showing SE2403 survey locations as a black line" fig-align="center" width="6in" height="7.2in"}
+
+{{< pagebreak >}}
+
+\
+\
+\
+Submitted by: \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+Johanna L. K. Wren, Ph.D.\
+Chief Scientist\
+\
+\
+\
+\
+\
+\
+Approved by: \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+Charles Littnan, Ph.D.\
+Science and Research Director\
+Pacific Islands Fisheries Science Center

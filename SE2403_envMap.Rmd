@@ -1,0 +1,200 @@
+---
+title: '**PROJECT REPORT**'
+header-includes:
+  - \usepackage{tabto}
+  - \usepackage{pdflscape}
+  - \usepackage{titling}
+  - \usepackage{graphicx} 
+  - \usepackage{fancyhdr}
+  - \newcommand{\blandscape}{\begin{landscape}}
+  - \newcommand{\elandscape}{\end{landscape}}
+  - \usepackage[T1]{fontenc}
+  - \usepackage[utf8]{inputenc}
+  - \usepackage{titling}
+  - \setlength{\droptitle}{-1in}
+  - \pretitle{\begin{center}
+  -  \includegraphics[width=4.5in]{PIFSCletterhead.png}\LARGE\\}
+mainfont: Times New Roman
+fontsize: 12pt
+output:
+  pdf_document:
+    toc: no
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '~/Documents/Cruises/SE2403_Features/')
+```
+
+```{r message=FALSE, include=FALSE}
+# Clear workspace
+rm(list=ls())
+
+# Set working directory
+mainDir <- '~/Documents/Cruises/SE2403_Features/'
+
+# Load libraries
+library(dplyr)
+library(lubridate)
+library(kableExtra)
+require(leaflet)
+require(tidyverse)
+library(RColorBrewer)
+library(ggpubr)
+library(knitr)
+library(rerddap)
+library(mapdata)
+#library(maptools)
+library(raster)
+library(data.table)
+library(lattice)
+library(latticeExtra)
+library(rasterVis)
+library(readxl)
+```
+
+```{r}
+# track line
+# Load SCS data
+orig <- read_xlsx('SCS/Snap_Final.xlsx') %>% 
+  mutate(Long_deg = as.numeric(substr(`Furuno-GP170_Longitude`, 1, 3)), Lat_deg = as.numeric(substr(`Furuno-GP170_Latitude`, 1, 2)), Long_min=as.numeric(str_sub(`Furuno-GP170_Longitude`, -nchar(`Furuno-GP170_Longitude`)+3, -2))/60, Lat_min=as.numeric(str_sub(`Furuno-GP170_Latitude`, -nchar(`Furuno-GP170_Latitude`)+2, -2))/60, Longitude=-Long_deg-Long_min, Latitude=Lat_deg+Lat_min, DateTimeUTC=as.POSIXct(paste(as.IDate(Date),format(Time, format = "%H:%M:%S")), tz = 'UTC'), DateTimeHST = as.POSIXct(format(DateTimeUTC, tz='HST'), Date2=as.IDate(DateTimeHST))) 
+
+# Convert orig tibble to data frame
+track <- as.data.frame(orig)
+names(track)<- make.names(names(track))
+track$Station.Number <- NA
+
+# Assign station numbers to all stations because enough are missing or wrong in SCS
+track[which(track$DateTimeHST >= '2024-03-19 07:00:00' & track$DateTimeHST < "2024-03-20 18:00:00"),'Station.Number'] <- 1
+track[which(track$DateTimeHST >= '2024-03-21 19:00:00' & track$DateTimeHST < "2024-03-23 18:00:00"),'Station.Number'] <- 2
+track[which(track$DateTimeHST >= '2024-03-24 00:00:00' & track$DateTimeHST < "2024-03-25 12:00:00"),'Station.Number'] <- 3
+track[which(track$DateTimeHST >= '2024-03-25 18:00:00' & track$DateTimeHST < "2024-03-26 19:00:00"),'Station.Number'] <- 4
+track[which(track$DateTimeHST >= '2024-03-27 04:00:00' & track$DateTimeHST < "2024-03-28 12:00:00"),'Station.Number'] <- 5
+track[which(track$DateTimeHST >= '2024-03-28 17:00:00' & track$DateTimeHST < "2024-03-29 19:00:00"),'Station.Number'] <- 6
+track[which(track$DateTimeHST >= '2024-03-30 07:00:00' & track$DateTimeHST < "2024-03-31 07:00:00"),'Station.Number'] <- 7
+track[which(track$DateTimeHST >= '2024-03-31 18:00:00' & track$DateTimeHST < "2024-04-01 19:00:00"),'Station.Number'] <- 8
+track[which(track$DateTimeHST >= '2024-04-02 06:00:00' & track$DateTimeHST < "2024-04-03 06:00:00"),'Station.Number'] <- 9
+track[which(track$DateTimeHST >= '2024-04-03 18:00:00' & track$DateTimeHST < "2024-04-04 18:00:00"),'Station.Number'] <- 10
+track[which(track$DateTimeHST >= '2024-04-05 06:00:00' & track$DateTimeHST < "2024-04-06 06:00:00"),'Station.Number'] <- 11
+track[which(track$DateTimeHST >= '2024-04-06 18:00:00' & track$DateTimeHST < "2024-04-07 18:00:00"),'Station.Number'] <- 12
+track[which(track$DateTimeHST >= '2024-04-08 06:00:00' & track$DateTimeHST < "2024-04-09 06:00:00"),'Station.Number'] <- 13
+track[which(track$DateTimeHST >= '2024-04-09 18:00:00' & track$DateTimeHST < "2024-04-10 18:00:00"),'Station.Number'] <- 14
+track[which(track$DateTimeHST >= '2024-04-10 18:00:00' & track$DateTimeHST < "2024-04-11 18:00:00"),'Station.Number'] <- 15
+track[which(track$DateTimeHST >= '2024-04-12 06:00:00' & track$DateTimeHST < "2024-04-13 06:00:00"),'Station.Number'] <- 16
+track[which(track$DateTimeHST >= '2024-04-13 06:00:00'),'Station.Number'] <- 17
+
+# Add rounded times for easier insertion into the report
+track$hm <- format(round_date(track$DateTimeHST, unit='1 minute'), '%H:%M')
+```
+
+```{r}
+# Set domain from SCS data
+lat1 = 14#min(track$Latitude)-2
+lat2 <- 22#max(track$Latitude) + 2
+lon1 = -165#min(track$Longitude)+5
+lon2 <- -145#max(track$Longitude) - 5
+time1 <- paste0(as.IDate(min(track$DateTimeHST)), 'T00:00:00Z')
+time2 <- paste0(as.IDate(max(track$DateTimeHST)), 'T00:00:00Z')
+
+# Download SLA data through ERDDAP
+slaInfo <- info(url = 'https://coastwatch.noaa.gov/erddap', datasetid = 'noaacwBLENDEDsshDaily')
+slaDat <- griddap(slaInfo, time = c(time1, time2), latitude = c(lat1,lat2), longitude = c(lon1, lon2),
+                  #fields = sshInfo$variables$variable_name[1],
+                  stride = c(1,1,1),
+                  store=disk('SE2403_sla'))
+slaFile <- list.files(path='SE2403_sla/', pattern='.nc', full.names = T)
+slaAll <- brick(slaFile, varname='sla')
+
+uvInfo <- info(url = 'https://coastwatch.noaa.gov/erddap', datasetid = 'noaacwBLENDEDNRTcurrentsDaily')
+uvDat <- griddap(uvInfo, time = c(time1, time2), latitude = c(lat1,lat2), longitude = c(lon1, lon2),
+                  stride = c(1,1,1),
+                  store=disk('SE2403_cur'))
+uvFile <- list.files(path='SE2403_cur/', pattern='.nc', full.names = T)
+uAll <- brick(uvFile, varname='u_current')
+vAll <- brick(uvFile, varname='v_current')
+
+# download land data and save as spatial polygon in -180/180 degrees
+land2 <- map('world', fill=TRUE, xlim=c(-170,-130), ylim=c(0,40), plot=FALSE)
+ids2 <- sapply(strsplit(land2$names, ":"), function(x) x[1])
+bPols2 <- map2SpatialPolygons(land2, IDs=ids2, proj4string=CRS("+proj=longlat +datum=WGS84"))
+hi <- fortify(bPols2)
+
+# Set color theme
+mapThemeSSH <- rasterTheme(region=rev(brewer.pal(11, 'RdBu')))
+mapThemeVel <- rasterTheme(region=brewer.pal(9, 'GnBu'))
+
+slaRange <- max(abs(summary(slaAll)[c(1,5),]))+0.01
+
+```
+
+
+```{r}
+# Function for levelplot
+testPlotRas <- function(envData, mapTheme=mapThemeSST, colorSeq, colorUnit, isLog=FALSE, main) {
+  lPlot <- levelplot(envData, pretty=T, margin=FALSE, par.setting=mapTheme, at=colorSeq, xlab=NULL, ylab=NULL, main=main, zscaleLog=isLog,
+                     colorkey=list(title=colorUnit, title.gpar=list(cex=0), space='right', title.control=list(side='right'))) + 
+    layer(sp.polygons(bPols2, fill='gray50', col='gray30')) +
+    layer(panel.points(location[,c('Longitude','Latitude')], col='black', cex=0.75, pch=19)) +
+    layer(panel.lines(location[,c('Longitude','Latitude')], col='black', cex=0.75))
+  
+  return(lPlot)
+}
+```
+
+```{r}
+# Loop through days to make a daily SLA plot with our sample locations. 
+for (i in unique(track$Station.Number)) {
+  print(i)
+  location <- track %>% filter(Station.Number == i)
+  idx <- which(as.Date(getZ(slaAll)) == unique(as.Date(location$DateTimeHST))[1])
+  
+  png(sprintf('SE2403_sla/SE2403_sla_stn_%02d.png', i), width=6, height=5, res=300, unit='in')
+  print(testPlotRas(slaAll[[idx]], mapTheme = mapThemeSSH, colorSeq = seq(-slaRange,slaRange,by=round(slaRange/40,3)), colorUnit  = 'Sea level anomaly (m)', main=paste('Stn', i, getZ(slaAll[[idx]]))))
+  dev.off()
+    
+    # levelplot(slaAll[[idx]], pretty=T, margin=F, par.setting=mapThemeSSH, colorSeq = seq(-slaRange,slaRange,by=0.01), colorUnit  = 'Sea level anomaly (m)', main=paste('Station', i, '-', getZ(slaAll[[idx]]))) + 
+    # layer(sp.polygons(bPols2, fill='gray50', col='gray30')) +
+    # layer(panel.points(location[,c('Longitude','Latitude')], col='black', cex=0.6)) +
+    # layer(panel.lines(location[,c('Longitude','Latitude')], col='black', cex=0.75))
+  #print(a)
+  
+}
+```
+
+```{r}
+# Turn rasters into data frames for plotting in ggplot and metR
+# Choose date
+idx <- 6
+vels <- brick(uAll[[idx]], vAll[[idx]])
+names(vels) <- c('u', 'v')
+test <- rasterToPoints(vels)
+test <- data.frame(cbind(test, vel=sqrt(test[,3]^2 + test[,4]^2)))
+sla <- data.frame(rasterToPoints(slaAll[[idx]]))
+names(sla)[3] <- 'SLA'
+dat <- left_join(test, sla)
+
+```
+
+```{r}
+# Identify station locations
+stn <- track %>% filter(Station.Number >1 & Station.Number <= 5, Trigger.Name == 'CTD Deploy')
+
+ggplot() + 
+  metR::geom_contour_fill(data=dat, aes(x, y, z=SLA), na.fill =T, bins=40) + 
+  metR::geom_vector(data=dat, aes(x, y, dx=u, dy=v), arrow.angle=30, arrow.type='open', arrow.length = 0.3, pivot = 0, preserve.dir = T, direction = 'ccw', alpha=0.6) + 
+  borders(database = 'world', xlim=c(-162, -156), ylim=c(14,24), fill='darkgray') +
+  coord_sf(xlim=c(-162, -156), ylim=c(15,23)) +
+  metR::scale_fill_divergent(name='SLA (m)', ) +
+  theme_bw() + 
+  theme(legend.position = "right",
+          legend.key.height = unit(1.2, "cm"), 
+          legend.background = element_blank(),
+          axis.text = element_text(size = 12, colour = 1)) +
+  metR::scale_mag(max = 1.5, name = "Speed \n(m/s)", max_size = 0.9) +
+  labs(x = "", y = "", title = 'SE2403 cyclonic eddy 1', subtitle = paste('Stations 2-5; Background during', getZ(slaAll[[idx]]))) +
+  geom_path(data=stn, aes(Longitude,Latitude, group=Station.Number), lwd=1)
+
+ggsave('SE2403_cyclEddy1_mean.png', width=6, height=8)
+```
+
